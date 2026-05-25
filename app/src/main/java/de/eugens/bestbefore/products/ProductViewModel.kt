@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import de.eugens.bestbefore.Constants
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -13,6 +14,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 
 sealed class ProductIntent {
@@ -28,7 +30,6 @@ sealed class ProductIntent {
     data object ClearAllProducts : ProductIntent()
     data class AddProduct(val product: Product) : ProductIntent()
     data class SetFilter(val filter: ProductFilter) : ProductIntent()
-    data class SelectProductForEdit(val product: Product) : ProductIntent()
     data class UpdateProduct(val product: Product) : ProductIntent()
 }
 
@@ -38,6 +39,7 @@ sealed class ProductEvent {
 }
 
 class ProductViewModel(
+    private val formatter: DateTimeFormatter = DateTimeFormatter.ofPattern(Constants.DATE_FORMAT),
     private val repository: ProductRepository = ProductRepository()
 ) : ViewModel() {
 
@@ -69,7 +71,7 @@ class ProductViewModel(
             combine(_products, _currentFilter) { products, filter ->
                 applyFilter(products, filter)
             }.collect { filtered ->
-                _filteredProducts.value = filtered
+                _filteredProducts.value = sort(filtered)
             }
         }
     }
@@ -82,9 +84,13 @@ class ProductViewModel(
         }
     }
 
+    private fun sort(products: List<Product>): List<Product> {
+        return products.sortedBy { product -> LocalDate.parse(product.expirationDate, formatter) }
+    }
+
     private fun isExpired(product: Product): Boolean {
         return try {
-            val date = LocalDate.parse(product.expirationDate)
+            val date = LocalDate.parse(product.expirationDate, formatter)
             date.isBefore(LocalDate.now())
         } catch (e: Exception) {
             false
@@ -93,7 +99,7 @@ class ProductViewModel(
 
     private fun isUpcoming(product: Product): Boolean {
         return try {
-            val date = LocalDate.parse(product.expirationDate)
+            val date = LocalDate.parse(product.expirationDate, formatter)
             val today = LocalDate.now()
             val daysUntil = ChronoUnit.DAYS.between(today, date)
             daysUntil in 0..7
@@ -116,8 +122,7 @@ class ProductViewModel(
             is ProductIntent.ClearAllProducts -> clearAllProducts()
             is ProductIntent.AddProduct -> addProduct(intent.product)
             is ProductIntent.SetFilter -> _currentFilter.value = intent.filter
-            is ProductIntent.SelectProductForEdit -> _uiState.value = UiState.EditProduct(intent.product)
-            is ProductIntent.UpdateProduct -> updateProduct(intent.product)
+            is ProductIntent.UpdateProduct -> { /* TODO updateProduct(intent.product) */ }
         }
     }
 

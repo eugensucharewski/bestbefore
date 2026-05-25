@@ -18,19 +18,32 @@ import java.io.ByteArrayOutputStream
 import androidx.core.graphics.scale
 
 class ProductRepository {
+
+    companion object {
+        private const val NAME = "name"
+        private const val EXPIRATION_DATE = "expirationDate"
+        private const val PRODUCTION_DATE = "productionDate"
+        private const val CONFIDENCE = "confidence"
+        private const val RAW_TEXT = "rawText"
+        private const val PRODUCT_IMAGE = "productImage"
+
+        const val GEMINI_MODEL_NAME = "gemini-flash-latest"
+        private const val SYSTEM_INSTRUCTION = "Ты — специализированный ассистент по распознаванию названий продуктов питания и их сроков годности. " +
+                "Для каждого изображения (фото продукта и фото даты) определи название продукта и срок годности. " +
+                "Верни массив JSON объектов с полями: productName (String), date_found (boolean), expiration_date (DD.MM.YYYY), production_date (YYYY-MM-DD), confidence (high/medium/low), raw_text_detected (string)."
+        private const val ANALYZE_PROMPT = "Проанализируй эти пары изображений. Каждая пара изображений - это фото продукта и его срока годности. " +
+                "Верни результат в виде JSON массива объектов ExpirationInfo."
+    }
+
     private val db = Firebase.firestore
     private val auth = Firebase.auth
     private val json = Json { ignoreUnknownKeys = true }
 
     private val generativeModel = GenerativeModel(
-        modelName = Constants.GEMINI_MODEL_NAME,
+        modelName = GEMINI_MODEL_NAME,
         apiKey = BuildConfig.GEMINI_API_KEY,
         systemInstruction = content {
-            text(
-                "Ты — специализированный ассистент по распознаванию сроков годности. " +
-                        "Для каждого изображения (фото даты) определи срок годности. " +
-                        "Верни массив JSON объектов с полями: date_found (boolean), expiration_date (DD.MM.YYYY), production_date (YYYY-MM-DD), confidence (high/medium/low), raw_text_detected (string)."
-            )
+            text(SYSTEM_INSTRUCTION)
         },
         generationConfig = generationConfig {
             responseMimeType = "application/json"
@@ -64,12 +77,12 @@ class ProductRepository {
     suspend fun addProduct(product: Product) = withContext(Dispatchers.IO) {
         val currentUser = auth.currentUser
         val productMap = hashMapOf(
-            "name" to product.name,
-            "expirationDate" to product.expirationDate,
-            "productionDate" to product.productionDate,
-            "confidence" to product.confidence,
-            "rawText" to product.rawText,
-            "productImage" to product.productImage,
+            NAME to product.name,
+            EXPIRATION_DATE to product.expirationDate,
+            PRODUCTION_DATE to product.productionDate,
+            CONFIDENCE to product.confidence,
+            RAW_TEXT to product.rawText,
+            PRODUCT_IMAGE to product.productImage,
             Constants.FIELD_USER_ID to currentUser?.uid
         )
         db.collection(Constants.COLLECTION_PRODUCTS).add(productMap).await()
@@ -78,26 +91,26 @@ class ProductRepository {
     suspend fun updateProduct(product: Product) = withContext(Dispatchers.IO) {
         val currentUser = auth.currentUser
         val productMap = hashMapOf(
-            "name" to product.name,
-            "expirationDate" to product.expirationDate,
-            "productionDate" to product.productionDate,
-            "confidence" to product.confidence,
-            "rawText" to product.rawText,
-            "productImage" to product.productImage,
+            NAME to product.name,
+            EXPIRATION_DATE to product.expirationDate,
+            PRODUCTION_DATE to product.productionDate,
+            CONFIDENCE to product.confidence,
+            RAW_TEXT to product.rawText,
+            PRODUCT_IMAGE to product.productImage,
             Constants.FIELD_USER_ID to currentUser?.uid
         )
-        db.collection(Constants.COLLECTION_PRODUCTS).document(product.id).set(productMap).await()
+        db.collection(Constants.COLLECTION_PRODUCTS)
+            .document(product.id).set(productMap).await()
     }
 
     suspend fun analyzeImages(items: List<ScannedItem>): List<ExpirationInfo> =
         withContext(Dispatchers.IO) {
-            val prompt =
-                "Проанализируй эти изображения. Каждое изображение - это фото срока годности продукта. " +
-                        "Верни результат в виде JSON массива объектов ExpirationInfo."
+            val prompt = ANALYZE_PROMPT
 
             val response = generativeModel.generateContent(
                 content {
                     items.forEach { item ->
+                        item.productBitmap?.let { image(it) }
                         item.dateBitmap?.let { image(it) }
                     }
                     text(prompt)
@@ -116,12 +129,12 @@ class ProductRepository {
                 val encodedImage = productBitmap?.let { resizeAndEncodeBitmap(it) }
 
                 val productMap = hashMapOf(
-                    "name" to "Product ${index + 1}",
-                    "expirationDate" to (info.expiration_date ?: ""),
-                    "productionDate" to info.production_date,
-                    "confidence" to info.confidence,
-                    "rawText" to info.raw_text_detected,
-                    "productImage" to encodedImage,
+                    NAME to info.productName,
+                    EXPIRATION_DATE to (info.expiration_date ?: ""),
+                    PRODUCTION_DATE to info.production_date,
+                    CONFIDENCE to info.confidence,
+                    RAW_TEXT to info.raw_text_detected,
+                    PRODUCT_IMAGE to encodedImage,
                     Constants.FIELD_USER_ID to currentUser?.uid
                 )
                 db.collection(Constants.COLLECTION_PRODUCTS).add(productMap).await()

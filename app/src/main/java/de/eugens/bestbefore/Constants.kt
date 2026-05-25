@@ -1,7 +1,6 @@
 package de.eugens.bestbefore
 
 object Constants {
-    const val GEMINI_MODEL_NAME = "gemini-flash-latest"
     const val COLLECTION_PRODUCTS = "products"
     const val FIELD_USER_ID = "userId"
     
@@ -11,4 +10,6 @@ object Constants {
     
     const val NOTIFICATION_CHANNEL_ID = "processing_results"
     const val NOTIFICATION_ID = 1
+
+    const val DATE_FORMAT = "dd.MM.yyyy"
 }

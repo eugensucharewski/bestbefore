@@ -27,12 +27,3 @@ sealed interface UiState {
     
     data class Error(val errorMessage: String) : UiState
 }
-
-@Serializable
-data class ExpirationInfo(
-    val date_found: Boolean,
-    val expiration_date: String? = null,
-    val production_date: String? = null,
-    val confidence: String? = null,
-    val raw_text_detected: String? = null
-)

@@ -70,6 +70,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 import androidx.camera.core.Preview as CameraPreview
 
@@ -148,7 +149,7 @@ fun ProductsScreen(
                         products = products,
                         currentFilter = currentFilter,
                         onFilterChange = { productViewModel.onAction(ProductIntent.SetFilter(it)) },
-                        onProductClick = { productViewModel.onAction(ProductIntent.SelectProductForEdit(it)) },
+                        onProductClick = { productViewModel.onAction(ProductIntent.UpdateProduct(it)) },
                         onAddClick = { productViewModel.onAction(ProductIntent.StartScanning) },
                         onDeleteProduct = { productViewModel.onAction(ProductIntent.DeleteProduct(it.id)) },
                         onUndoDelete = { productViewModel.onAction(ProductIntent.AddProduct(it)) },
@@ -357,12 +358,13 @@ fun ProductItem(product: Product, onProductClick: (Product) -> Unit,) {
 
     val statusColor = remember(product.expirationDate) {
         try {
-            val date = LocalDate.parse(product.expirationDate)
+            val formatter = DateTimeFormatter.ofPattern(Constants.DATE_FORMAT)
+            val date = LocalDate.parse(product.expirationDate, formatter)
             val today = LocalDate.now()
             val daysUntil = ChronoUnit.DAYS.between(today, date)
             when {
                 daysUntil < 0 -> Color.Red
-                daysUntil <= 7 -> Color(0xFFFFC107) // Amber/Yellow
+                daysUntil <= 2 -> Color(0xFFFFC107) // Amber/Yellow
                 else -> Color.Green
             }
         } catch (e: Exception) {
