@@ -1,5 +1,11 @@
 package de.eugens.bestbefore
 
+enum class ProductFilter {
+    ALL,
+    EXPIRED,
+    EXPIRED_AND_UPCOMING
+}
+
 sealed interface UiState {
     object MainList : UiState
     
@@ -12,6 +18,8 @@ sealed interface UiState {
     object Processing : UiState
     
     object Settings : UiState
+
+    data class EditProduct(val product: Product) : UiState
     
     data class Success(val products: List<Product>) : UiState
     

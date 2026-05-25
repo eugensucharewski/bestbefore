@@ -1,6 +1,8 @@
 package de.eugens.bestbefore
 
 import android.Manifest
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Matrix
@@ -44,6 +46,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.os.LocaleListCompat
@@ -52,6 +55,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import androidx.camera.core.Preview as CameraPreview
 
@@ -64,8 +69,40 @@ fun ProductsScreen(
     val uiState by productViewModel.uiState.collectAsState()
     val products by productViewModel.products.collectAsState()
     val authState by authViewModel.authState.collectAsState()
+    val currentFilter by productViewModel.currentFilter.collectAsState()
 
     val cameraPermissionState = rememberPermissionState(Manifest.permission.CAMERA)
+    val context = LocalContext.current
+
+    LaunchedEffect(Unit) {
+        productViewModel.events.collectLatest { event ->
+            when (event) {
+                is ProductEvent.NotifyCompletion -> {
+                    val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                    val channelId = Constants.NOTIFICATION_CHANNEL_ID
+
+                    val channel = NotificationChannel(
+                        channelId,
+                        context.getString(R.string.processing_results_channel_name),
+                        NotificationManager.IMPORTANCE_DEFAULT
+                    )
+                    notificationManager.createNotificationChannel(channel)
+
+                    val notification = NotificationCompat.Builder(context, channelId)
+                        .setContentTitle(context.getString(R.string.processing_completed))
+                        .setContentText(context.getString(R.string.new_products_added))
+                        .setSmallIcon(android.R.drawable.ic_dialog_info)
+                        .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+                        .setAutoCancel(true)
+                        .build()
+
+                    notificationManager.notify(Constants.NOTIFICATION_ID, notification)
+                }
+                else -> {}
+            }
+        }
+    }
+
     val notificationPermissionState = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
         rememberPermissionState(Manifest.permission.POST_NOTIFICATIONS)
     } else {
@@ -96,6 +133,8 @@ fun ProductsScreen(
                 when (val state = uiState) {
                     is UiState.MainList -> MainScreen(
                         products = products,
+                        currentFilter = currentFilter,
+                        onFilterChange = { productViewModel.onAction(ProductIntent.SetFilter(it)) },
                         onAddClick = { productViewModel.onAction(ProductIntent.StartScanning) },
                         onDeleteProduct = { productViewModel.onAction(ProductIntent.DeleteProduct(it.id)) },
                         onUndoDelete = { productViewModel.onAction(ProductIntent.AddProduct(it)) },
@@ -103,8 +142,10 @@ fun ProductsScreen(
                         onSettingsClick = { productViewModel.onAction(ProductIntent.OpenSettings) }
                     )
                     is UiState.Scanning -> ScanningScreen(
-                        state,
-                        onCapture = { productViewModel.onAction(ProductIntent.CapturePhoto(it)) },
+                        state = state,
+                        events = productViewModel.events,
+                        onCaptureClick = { productViewModel.onAction(ProductIntent.RequestCapture) },
+                        onCaptureResult = { productViewModel.onAction(ProductIntent.CapturePhoto(it)) },
                         onCancel = { productViewModel.onAction(ProductIntent.CancelScanning) },
                         onFinish = { productViewModel.onAction(ProductIntent.FinishScanning) }
                     )
@@ -112,7 +153,7 @@ fun ProductsScreen(
                     is UiState.Settings -> SettingsScreen(
                         onBack = { productViewModel.onAction(ProductIntent.BackToMain) },
                         onSignOut = {
-                            authViewModel.signOut()
+                            authViewModel.onAction(AuthIntent.SignOut)
                             productViewModel.onAction(ProductIntent.BackToMain)
                         }
                     )
@@ -129,6 +170,8 @@ fun ProductsScreen(
 @Composable
 fun MainScreen(
     products: List<Product>,
+    currentFilter: ProductFilter,
+    onFilterChange: (ProductFilter) -> Unit,
     onAddClick: () -> Unit,
     onDeleteProduct: (Product) -> Unit,
     onUndoDelete: (Product) -> Unit,
@@ -145,7 +188,7 @@ fun MainScreen(
             TopAppBar(
                 title = { Text(stringResource(R.string.main_title)) },
                 actions = {
-                    if (products.isNotEmpty()) {
+                    if (products.isNotEmpty() || currentFilter != ProductFilter.ALL) {
                         IconButton(onClick = { showClearConfirm = true }) {
                             Icon(Icons.Default.DeleteSweep, contentDescription = stringResource(R.string.clear_all))
                         }
@@ -180,66 +223,104 @@ fun MainScreen(
             )
         }
 
-        if (products.isEmpty()) {
-            Box(
+        Column(modifier = Modifier.padding(padding)) {
+            FilterChips(
+                currentFilter = currentFilter,
+                onFilterChange = onFilterChange,
                 modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding), contentAlignment = Alignment.Center
-            ) {
-                Text(stringResource(R.string.empty_list))
-            }
-        } else {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding)
-            ) {
-                items(products, key = { it.id }) { product ->
-                    val dismissState = rememberSwipeToDismissBoxState()
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+            )
 
-                    LaunchedEffect(dismissState.currentValue) {
-                        if (dismissState.currentValue != SwipeToDismissBoxValue.Settled) {
-                            onDeleteProduct(product)
-                            scope.launch {
-                                val result = snackbarHostState.showSnackbar(
-                                    message = context.getString(R.string.deleted_message, product.name),
-                                    actionLabel = context.getString(R.string.undo),
-                                    duration = SnackbarDuration.Short
-                                )
-                                if (result == SnackbarResult.ActionPerformed) {
-                                    onUndoDelete(product)
+            if (products.isEmpty()) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = if (currentFilter == ProductFilter.ALL)
+                            stringResource(R.string.empty_list)
+                        else
+                            stringResource(R.string.empty_list) // Could use a specific "no results for filter" string
+                    )
+                }
+            } else {
+                LazyColumn(modifier = Modifier.fillMaxSize()) {
+                    items(products, key = { it.id }) { product ->
+                        val dismissState = rememberSwipeToDismissBoxState()
+
+                        LaunchedEffect(dismissState.currentValue) {
+                            if (dismissState.currentValue != SwipeToDismissBoxValue.Settled) {
+                                onDeleteProduct(product)
+                                scope.launch {
+                                    val result = snackbarHostState.showSnackbar(
+                                        message = context.getString(R.string.deleted_message, product.name),
+                                        actionLabel = context.getString(R.string.undo),
+                                        duration = SnackbarDuration.Short
+                                    )
+                                    if (result == SnackbarResult.ActionPerformed) {
+                                        onUndoDelete(product)
+                                    }
                                 }
                             }
                         }
-                    }
 
-                    SwipeToDismissBox(
-                        state = dismissState,
-                        backgroundContent = {
-                            val color = when (dismissState.dismissDirection) {
-                                SwipeToDismissBoxValue.StartToEnd -> Color.Red
-                                SwipeToDismissBoxValue.EndToStart -> Color.Red
-                                SwipeToDismissBoxValue.Settled -> Color.Transparent
+                        SwipeToDismissBox(
+                            state = dismissState,
+                            backgroundContent = {
+                                val color = when (dismissState.dismissDirection) {
+                                    SwipeToDismissBoxValue.StartToEnd -> Color.Red
+                                    SwipeToDismissBoxValue.EndToStart -> Color.Red
+                                    SwipeToDismissBoxValue.Settled -> Color.Transparent
+                                }
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .background(color)
+                                        .padding(horizontal = 20.dp),
+                                    contentAlignment = if (dismissState.dismissDirection == SwipeToDismissBoxValue.StartToEnd) Alignment.CenterStart else Alignment.CenterEnd
+                                ) {
+                                    Icon(
+                                        Icons.Default.Delete,
+                                        contentDescription = stringResource(R.string.delete),
+                                        tint = Color.White
+                                    )
+                                }
                             }
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .background(color)
-                                    .padding(horizontal = 20.dp),
-                                contentAlignment = if (dismissState.dismissDirection == SwipeToDismissBoxValue.StartToEnd) Alignment.CenterStart else Alignment.CenterEnd
-                            ) {
-                                Icon(
-                                    Icons.Default.Delete,
-                                    contentDescription = stringResource(R.string.delete),
-                                    tint = Color.White
-                                )
-                            }
+                        ) {
+                            ProductItem(product)
                         }
-                    ) {
-                        ProductItem(product)
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+fun FilterChips(
+    currentFilter: ProductFilter,
+    onFilterChange: (ProductFilter) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        ProductFilter.entries.forEach { filter ->
+            FilterChip(
+                selected = currentFilter == filter,
+                onClick = { onFilterChange(filter) },
+                label = {
+                    Text(
+                        text = when (filter) {
+                            ProductFilter.ALL -> stringResource(R.string.filter_all)
+                            ProductFilter.EXPIRED -> stringResource(R.string.filter_expired)
+                            ProductFilter.EXPIRED_AND_UPCOMING -> stringResource(R.string.filter_upcoming)
+                        }
+                    )
+                }
+            )
         }
     }
 }
@@ -314,7 +395,9 @@ fun ProductItem(product: Product) {
 @Composable
 fun ScanningScreen(
     state: UiState.Scanning,
-    onCapture: (Bitmap) -> Unit,
+    events: Flow<ProductEvent>,
+    onCaptureClick: () -> Unit,
+    onCaptureResult: (Bitmap) -> Unit,
     onCancel: () -> Unit,
     onFinish: () -> Unit
 ) {
@@ -324,6 +407,14 @@ fun ScanningScreen(
     val imageCapture = remember { ImageCapture.Builder().build() }
     var isFlashOn by remember { mutableStateOf(false) }
     var camera by remember { mutableStateOf<androidx.camera.core.Camera?>(null) }
+
+    LaunchedEffect(Unit) {
+        events.collectLatest { event ->
+            if (event is ProductEvent.TriggerCapture) {
+                takePhoto(context, imageCapture, state.step, onCaptureResult)
+            }
+        }
+    }
 
     LaunchedEffect(Unit) {
         val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
@@ -399,9 +490,7 @@ fun ScanningScreen(
             }
 
             Button(
-                onClick = {
-                    takePhoto(context, imageCapture, onCapture)
-                },
+                onClick = onCaptureClick,
                 modifier = Modifier.size(80.dp),
                 shape = CircleShape,
                 colors = ButtonDefaults.buttonColors(containerColor = Color.White)
@@ -481,7 +570,7 @@ fun ErrorScreen(message: String, onBack: () -> Unit) {
     }
 }
 
-fun takePhoto(context: Context, imageCapture: ImageCapture, onPhotoTaken: (Bitmap) -> Unit) {
+fun takePhoto(context: Context, imageCapture: ImageCapture, step: ScanStep, onPhotoTaken: (Bitmap) -> Unit) {
     imageCapture.takePicture(
         ContextCompat.getMainExecutor(context),
         object : ImageCapture.OnImageCapturedCallback() {
@@ -490,7 +579,45 @@ fun takePhoto(context: Context, imageCapture: ImageCapture, onPhotoTaken: (Bitma
                 val matrix = Matrix()
                 matrix.postRotate(image.imageInfo.rotationDegrees.toFloat())
                 val rotatedBitmap = Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
-                onPhotoTaken(rotatedBitmap)
+                
+                // Clean up original bitmap if a new one was created for rotation
+                if (bitmap != rotatedBitmap) {
+                    bitmap.recycle()
+                }
+
+                val width = rotatedBitmap.width
+                val height = rotatedBitmap.height
+                
+                val cropRect = if (step == ScanStep.PRODUCT_PHOTO) {
+                    android.graphics.Rect(
+                        (width * 0.1f).toInt(),
+                        (height * 0.2f).toInt(),
+                        (width * 0.9f).toInt(),
+                        (height * 0.6f).toInt()
+                    )
+                } else {
+                    android.graphics.Rect(
+                        (width * 0.1f).toInt(),
+                        (height * 0.4f).toInt(),
+                        (width * 0.9f).toInt(),
+                        (height * 0.55f).toInt()
+                    )
+                }
+
+                val croppedBitmap = Bitmap.createBitmap(
+                    rotatedBitmap,
+                    cropRect.left,
+                    cropRect.top,
+                    cropRect.width(),
+                    cropRect.height()
+                )
+                
+                // Clean up rotated bitmap after cropping
+                if (rotatedBitmap != croppedBitmap) {
+                    rotatedBitmap.recycle()
+                }
+                
+                onPhotoTaken(croppedBitmap)
                 image.close()
             }
 

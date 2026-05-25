@@ -37,4 +37,8 @@
     <string name="error">Fehler</string>
     <string name="settings">Einstellungen</string>
     <string name="language">Sprache</string>
+    <string name="processing_results_channel_name">Verarbeitungsergebnisse</string>
+    <string name="filter_all">Alle</string>
+    <string name="filter_expired">Abgelaufen</string>
+    <string name="filter_upcoming">Abgelaufen &amp; Bald</string>
 </resources>

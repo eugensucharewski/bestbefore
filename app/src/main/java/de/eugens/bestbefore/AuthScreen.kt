@@ -50,8 +50,8 @@ fun AuthScreen(viewModel: AuthViewModel) {
         } else {
             Button(
                 onClick = {
-                    if (isSignUp) viewModel.signUp(email, password)
-                    else viewModel.signIn(email, password)
+                    if (isSignUp) viewModel.onAction(AuthIntent.SignUp(email, password))
+                    else viewModel.onAction(AuthIntent.SignIn(email, password))
                 },
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -68,7 +68,7 @@ fun AuthScreen(viewModel: AuthViewModel) {
                 color = MaterialTheme.colorScheme.error,
                 modifier = Modifier.padding(top = 8.dp)
             )
-            Button(onClick = { viewModel.resetError() }) {
+            Button(onClick = { viewModel.onAction(AuthIntent.ResetError) }) {
                 Text(stringResource(R.string.try_again))
             }
         }

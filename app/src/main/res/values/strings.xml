@@ -37,4 +37,12 @@
     <string name="error">Error</string>
     <string name="settings">Settings</string>
     <string name="language">Language</string>
+    <string name="processing_results_channel_name">Processing Results</string>
+    <string name="filter_all">All</string>
+    <string name="filter_expired">Expired</string>
+    <string name="filter_upcoming">Expired &amp; Upcoming</string>
+    <string name="edit_product">Edit Product</string>
+    <string name="save">Save</string>
+    <string name="product_name">Product Name</string>
+    <string name="expiration_date">Expiration Date</string>
 </resources>

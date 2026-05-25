@@ -37,4 +37,8 @@
     <string name="error">Ошибка</string>
     <string name="settings">Настройки</string>
     <string name="language">Язык</string>
+    <string name="processing_results_channel_name">Результаты обработки</string>
+    <string name="filter_all">Все</string>
+    <string name="filter_expired">Просроченные</string>
+    <string name="filter_upcoming">Скоро истекают</string>
 </resources>
