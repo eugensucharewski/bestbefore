@@ -1,4 +1,6 @@
-package de.eugens.bestbefore
+package de.eugens.bestbefore.products
+
+import kotlinx.serialization.Serializable
 
 enum class ProductFilter {
     ALL,
@@ -26,7 +28,7 @@ sealed interface UiState {
     data class Error(val errorMessage: String) : UiState
 }
 
-@kotlinx.serialization.Serializable
+@Serializable
 data class ExpirationInfo(
     val date_found: Boolean,
     val expiration_date: String? = null,

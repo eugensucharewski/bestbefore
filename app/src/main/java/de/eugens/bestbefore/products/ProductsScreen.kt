@@ -1,12 +1,14 @@
-package de.eugens.bestbefore
+package de.eugens.bestbefore.products
 
 import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Matrix
 import android.os.Build
+import android.util.Base64
 import android.util.Log
 import androidx.camera.core.ImageCapture
 import androidx.camera.core.ImageCaptureException
@@ -49,15 +51,26 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import androidx.appcompat.app.AppCompatDelegate
+import androidx.camera.core.Camera
+import androidx.camera.core.CameraSelector
+import androidx.compose.foundation.clickable
 import androidx.core.os.LocaleListCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
+import de.eugens.bestbefore.auth.AuthIntent
+import de.eugens.bestbefore.auth.AuthState
+import de.eugens.bestbefore.auth.AuthViewModel
+import de.eugens.bestbefore.Constants
+import de.eugens.bestbefore.R
+import de.eugens.bestbefore.auth.AuthScreen
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import java.time.LocalDate
+import java.time.temporal.ChronoUnit
 import androidx.camera.core.Preview as CameraPreview
 
 @OptIn(ExperimentalPermissionsApi::class)
@@ -135,6 +148,7 @@ fun ProductsScreen(
                         products = products,
                         currentFilter = currentFilter,
                         onFilterChange = { productViewModel.onAction(ProductIntent.SetFilter(it)) },
+                        onProductClick = { productViewModel.onAction(ProductIntent.SelectProductForEdit(it)) },
                         onAddClick = { productViewModel.onAction(ProductIntent.StartScanning) },
                         onDeleteProduct = { productViewModel.onAction(ProductIntent.DeleteProduct(it.id)) },
                         onUndoDelete = { productViewModel.onAction(ProductIntent.AddProduct(it)) },
@@ -157,7 +171,8 @@ fun ProductsScreen(
                             productViewModel.onAction(ProductIntent.BackToMain)
                         }
                     )
-                    is UiState.Error -> ErrorScreen(state.errorMessage) { productViewModel.onAction(ProductIntent.CancelScanning) }
+                    is UiState.Error -> ErrorScreen(state.errorMessage) { productViewModel.onAction(
+                        ProductIntent.CancelScanning) }
                     else -> {}
                 }
             }
@@ -172,6 +187,7 @@ fun MainScreen(
     products: List<Product>,
     currentFilter: ProductFilter,
     onFilterChange: (ProductFilter) -> Unit,
+    onProductClick: (Product) -> Unit,
     onAddClick: () -> Unit,
     onDeleteProduct: (Product) -> Unit,
     onUndoDelete: (Product) -> Unit,
@@ -288,7 +304,7 @@ fun MainScreen(
                                 }
                             }
                         ) {
-                            ProductItem(product)
+                            ProductItem(product, onProductClick)
                         }
                     }
                 }
@@ -326,12 +342,12 @@ fun FilterChips(
 }
 
 @Composable
-fun ProductItem(product: Product) {
+fun ProductItem(product: Product, onProductClick: (Product) -> Unit,) {
     val bitmap = remember(product.productImage) {
         product.productImage?.let {
             try {
-                val decodedString = android.util.Base64.decode(it, android.util.Base64.DEFAULT)
-                android.graphics.BitmapFactory.decodeByteArray(decodedString, 0, decodedString.size)
+                val decodedString = Base64.decode(it, Base64.DEFAULT)
+                BitmapFactory.decodeByteArray(decodedString, 0, decodedString.size)
             } catch (e: Exception) {
                 Log.d("ProductsScreen", "decodeByteArray", e)
                 null
@@ -341,9 +357,9 @@ fun ProductItem(product: Product) {
 
     val statusColor = remember(product.expirationDate) {
         try {
-            val date = java.time.LocalDate.parse(product.expirationDate)
-            val today = java.time.LocalDate.now()
-            val daysUntil = java.time.temporal.ChronoUnit.DAYS.between(today, date)
+            val date = LocalDate.parse(product.expirationDate)
+            val today = LocalDate.now()
+            val daysUntil = ChronoUnit.DAYS.between(today, date)
             when {
                 daysUntil < 0 -> Color.Red
                 daysUntil <= 7 -> Color(0xFFFFC107) // Amber/Yellow
@@ -357,7 +373,10 @@ fun ProductItem(product: Product) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(8.dp),
+            .padding(8.dp)
+            .clickable(onClick = {
+                onProductClick.invoke(product)
+            }),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -406,7 +425,7 @@ fun ScanningScreen(
     val previewView = remember { PreviewView(context) }
     val imageCapture = remember { ImageCapture.Builder().build() }
     var isFlashOn by remember { mutableStateOf(false) }
-    var camera by remember { mutableStateOf<androidx.camera.core.Camera?>(null) }
+    var camera by remember { mutableStateOf<Camera?>(null) }
 
     LaunchedEffect(Unit) {
         events.collectLatest { event ->
@@ -427,7 +446,7 @@ fun ScanningScreen(
                 cameraProvider.unbindAll()
                 camera = cameraProvider.bindToLifecycle(
                     lifecycleOwner,
-                    androidx.camera.core.CameraSelector.DEFAULT_BACK_CAMERA,
+                    CameraSelector.DEFAULT_BACK_CAMERA,
                     preview,
                     imageCapture
                 )
@@ -450,8 +469,8 @@ fun ScanningScreen(
                 .padding(horizontal = 16.dp, vertical = 8.dp)
         ) {
             Text(
-                text = if (state.step == ScanStep.PRODUCT_PHOTO) 
-                    stringResource(R.string.step_product_photo) 
+                text = if (state.step == ScanStep.PRODUCT_PHOTO)
+                    stringResource(R.string.step_product_photo)
                 else 
                     stringResource(R.string.step_date_photo),
                 color = Color.White,
@@ -640,7 +659,8 @@ fun SettingsScreen(
                 title = { Text(stringResource(R.string.settings)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(
+                            R.string.back))
                     }
                 }
             )

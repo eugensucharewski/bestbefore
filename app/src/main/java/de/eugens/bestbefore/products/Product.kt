@@ -1,4 +1,4 @@
-package de.eugens.bestbefore
+package de.eugens.bestbefore.products
 
 import android.graphics.Bitmap
 import kotlinx.serialization.Serializable

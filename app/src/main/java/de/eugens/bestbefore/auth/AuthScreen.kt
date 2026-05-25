@@ -1,4 +1,4 @@
-package de.eugens.bestbefore
+package de.eugens.bestbefore.auth
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
@@ -9,6 +9,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 
 import androidx.compose.ui.res.stringResource
+import de.eugens.bestbefore.R
 
 @Composable
 fun AuthScreen(viewModel: AuthViewModel) {
@@ -58,7 +59,8 @@ fun AuthScreen(viewModel: AuthViewModel) {
                 Text(if (isSignUp) stringResource(R.string.sign_up_button) else stringResource(R.string.sign_in_button))
             }
             TextButton(onClick = { isSignUp = !isSignUp }) {
-                Text(if (isSignUp) stringResource(R.string.already_have_account) else stringResource(R.string.no_account))
+                Text(if (isSignUp) stringResource(R.string.already_have_account) else stringResource(
+                    R.string.no_account))
             }
         }
 

@@ -1,4 +1,4 @@
-package de.eugens.bestbefore
+package de.eugens.bestbefore.products
 
 import android.graphics.Bitmap
 import android.util.Log
@@ -10,7 +10,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
+import java.time.LocalDate
+import java.time.temporal.ChronoUnit
 
 sealed class ProductIntent {
     data object LoadProducts : ProductIntent()
@@ -63,7 +66,7 @@ class ProductViewModel(
 
     private fun observeProductsAndFilter() {
         viewModelScope.launch {
-            kotlinx.coroutines.flow.combine(_products, _currentFilter) { products, filter ->
+            combine(_products, _currentFilter) { products, filter ->
                 applyFilter(products, filter)
             }.collect { filtered ->
                 _filteredProducts.value = filtered
@@ -81,8 +84,8 @@ class ProductViewModel(
 
     private fun isExpired(product: Product): Boolean {
         return try {
-            val date = java.time.LocalDate.parse(product.expirationDate)
-            date.isBefore(java.time.LocalDate.now())
+            val date = LocalDate.parse(product.expirationDate)
+            date.isBefore(LocalDate.now())
         } catch (e: Exception) {
             false
         }
@@ -90,9 +93,9 @@ class ProductViewModel(
 
     private fun isUpcoming(product: Product): Boolean {
         return try {
-            val date = java.time.LocalDate.parse(product.expirationDate)
-            val today = java.time.LocalDate.now()
-            val daysUntil = java.time.temporal.ChronoUnit.DAYS.between(today, date)
+            val date = LocalDate.parse(product.expirationDate)
+            val today = LocalDate.now()
+            val daysUntil = ChronoUnit.DAYS.between(today, date)
             daysUntil in 0..7
         } catch (e: Exception) {
             false

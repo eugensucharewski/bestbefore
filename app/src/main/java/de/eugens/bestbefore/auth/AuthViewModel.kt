@@ -1,4 +1,4 @@
-package de.eugens.bestbefore
+package de.eugens.bestbefore.auth
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
