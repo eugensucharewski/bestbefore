@@ -20,6 +20,9 @@ sealed class AuthIntent {
     data class SignUp(val email: String, val pass: String) : AuthIntent()
     data object SignOut : AuthIntent()
     data object ResetError : AuthIntent()
+    data class UpdateEmail(val email: String) : AuthIntent()
+    data class UpdatePassword(val password: String) : AuthIntent()
+    data object ToggleMode : AuthIntent()
 }
 
 class AuthViewModel(
@@ -30,6 +33,15 @@ class AuthViewModel(
         repository.currentUserEmail?.let { AuthState.Authenticated(it) } ?: AuthState.Unauthenticated
     )
     val authState: StateFlow<AuthState> = _authState.asStateFlow()
+
+    private val _email = MutableStateFlow("")
+    val email: StateFlow<String> = _email.asStateFlow()
+
+    private val _password = MutableStateFlow("")
+    val password: StateFlow<String> = _password.asStateFlow()
+
+    private val _isSignUp = MutableStateFlow(false)
+    val isSignUp: StateFlow<Boolean> = _isSignUp.asStateFlow()
 
     init {
         viewModelScope.launch {
@@ -45,6 +57,9 @@ class AuthViewModel(
             is AuthIntent.SignUp -> signUp(intent.email, intent.pass)
             is AuthIntent.SignOut -> signOut()
             is AuthIntent.ResetError -> resetError()
+            is AuthIntent.UpdateEmail -> _email.value = intent.email
+            is AuthIntent.UpdatePassword -> _password.value = intent.password
+            is AuthIntent.ToggleMode -> _isSignUp.value = !_isSignUp.value
         }
     }
 

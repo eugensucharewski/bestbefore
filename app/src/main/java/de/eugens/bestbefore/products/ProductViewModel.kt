@@ -1,17 +1,25 @@
 package de.eugens.bestbefore.products
 
+import android.app.Application
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.util.Base64
 import android.util.Log
-import androidx.lifecycle.ViewModel
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import de.eugens.bestbefore.Constants
+import de.eugens.bestbefore.worker.WorkerUtils
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -30,6 +38,7 @@ sealed class ProductIntent {
     data object ClearAllProducts : ProductIntent()
     data class AddProduct(val product: Product) : ProductIntent()
     data class SetFilter(val filter: ProductFilter) : ProductIntent()
+    data class SelectProductForEdit(val product: Product) : ProductIntent()
     data class UpdateProduct(val product: Product) : ProductIntent()
 }
 
@@ -38,10 +47,19 @@ sealed class ProductEvent {
     data object NotifyCompletion : ProductEvent()
 }
 
-class ProductViewModel(
-    private val formatter: DateTimeFormatter = DateTimeFormatter.ofPattern(Constants.DATE_FORMAT),
-    private val repository: ProductRepository = ProductRepository()
-) : ViewModel() {
+enum class ExpirationStatus {
+    EXPIRED, UPCOMING, FRESH, UNKNOWN
+}
+
+data class ProductUiModel(
+    val product: Product,
+    val status: ExpirationStatus
+)
+
+class ProductViewModel(application: Application) : AndroidViewModel(application) {
+
+    private val formatter = DateTimeFormatter.ofPattern(Constants.DATE_FORMAT)
+    private val repository = ProductRepository()
 
     companion object {
         private const val TAG = "ProductViewModel"
@@ -58,8 +76,11 @@ class ProductViewModel(
     private val _currentFilter = MutableStateFlow(ProductFilter.ALL)
     val currentFilter: StateFlow<ProductFilter> = _currentFilter.asStateFlow()
 
-    private val _filteredProducts = MutableStateFlow<List<Product>>(emptyList())
-    val products: StateFlow<List<Product>> = _filteredProducts.asStateFlow()
+    private val _filteredProducts = MutableStateFlow<List<ProductUiModel>>(emptyList())
+    val products: StateFlow<List<ProductUiModel>> = _filteredProducts.asStateFlow()
+
+    val threshold = WorkerUtils.getExpirationThresholdFlow(application)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, Constants.UPCOMING_EXPIRATION_DAYS_THRESHOLD)
 
     init {
         loadProducts()
@@ -68,19 +89,37 @@ class ProductViewModel(
 
     private fun observeProductsAndFilter() {
         viewModelScope.launch {
-            combine(_products, _currentFilter) { products, filter ->
-                applyFilter(products, filter)
-            }.collect { filtered ->
-                _filteredProducts.value = sort(filtered)
+            combine(_products, _currentFilter, threshold) { products, filter, thresholdValue ->
+                val filtered = applyFilter(products, filter, thresholdValue)
+                sort(filtered).map { product ->
+                    ProductUiModel(product, getExpirationStatus(product, thresholdValue))
+                }
+            }.collect { uiModels ->
+                _filteredProducts.value = uiModels
             }
         }
     }
 
-    private fun applyFilter(products: List<Product>, filter: ProductFilter): List<Product> {
+    private fun getExpirationStatus(product: Product, thresholdValue: Int): ExpirationStatus {
+        return try {
+            val date = LocalDate.parse(product.expirationDate, formatter)
+            val today = LocalDate.now()
+            val daysUntil = ChronoUnit.DAYS.between(today, date)
+            when {
+                daysUntil < 0 -> ExpirationStatus.EXPIRED
+                daysUntil <= thresholdValue -> ExpirationStatus.UPCOMING
+                else -> ExpirationStatus.FRESH
+            }
+        } catch (e: Exception) {
+            ExpirationStatus.UNKNOWN
+        }
+    }
+
+    private fun applyFilter(products: List<Product>, filter: ProductFilter, thresholdValue: Int): List<Product> {
         return when (filter) {
             ProductFilter.ALL -> products
             ProductFilter.EXPIRED -> products.filter { isExpired(it) }
-            ProductFilter.EXPIRED_AND_UPCOMING -> products.filter { isExpired(it) || isUpcoming(it) }
+            ProductFilter.EXPIRED_AND_UPCOMING -> products.filter { isExpired(it) || isUpcoming(it, thresholdValue) }
         }
     }
 
@@ -97,12 +136,12 @@ class ProductViewModel(
         }
     }
 
-    private fun isUpcoming(product: Product): Boolean {
+    private fun isUpcoming(product: Product, thresholdValue: Int): Boolean {
         return try {
             val date = LocalDate.parse(product.expirationDate, formatter)
             val today = LocalDate.now()
             val daysUntil = ChronoUnit.DAYS.between(today, date)
-            daysUntil in 0..7
+            daysUntil in 0..thresholdValue
         } catch (e: Exception) {
             false
         }
@@ -122,7 +161,28 @@ class ProductViewModel(
             is ProductIntent.ClearAllProducts -> clearAllProducts()
             is ProductIntent.AddProduct -> addProduct(intent.product)
             is ProductIntent.SetFilter -> _currentFilter.value = intent.filter
-            is ProductIntent.UpdateProduct -> { /* TODO updateProduct(intent.product) */ }
+            is ProductIntent.SelectProductForEdit -> selectProductForEdit(intent.product)
+            is ProductIntent.UpdateProduct -> updateProduct(intent.product)
+        }
+    }
+
+    private fun selectProductForEdit(product: Product) {
+        _uiState.value = UiState.EditProduct(product)
+        viewModelScope.launch {
+            val bitmap = withContext(Dispatchers.IO) {
+                product.productImage?.let {
+                    try {
+                        val decodedString = Base64.decode(it, Base64.DEFAULT)
+                        BitmapFactory.decodeByteArray(decodedString, 0, decodedString.size)
+                    } catch (e: Exception) {
+                        null
+                    }
+                }
+            }
+            val currentState = _uiState.value
+            if (currentState is UiState.EditProduct && currentState.product.id == product.id) {
+                _uiState.value = currentState.copy(productBitmap = bitmap)
+            }
         }
     }
 
@@ -135,8 +195,9 @@ class ProductViewModel(
     private suspend fun refreshProducts() {
         try {
             _products.value = repository.getProducts()
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
-            if (e is CancellationException) throw e
             Log.e(TAG, "refreshProducts failed", e)
             _uiState.value = UiState.Error(e.localizedMessage ?: "Failed to load products")
         }
@@ -207,8 +268,9 @@ class ProductViewModel(
                 refreshProducts()
                 _uiState.value = UiState.MainList
                 _events.emit(ProductEvent.NotifyCompletion)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
-                if (e is CancellationException) throw e
                 Log.e(TAG, "processItems failed", e)
                 _uiState.value = UiState.Error(e.localizedMessage ?: "Analysis failed")
             }
@@ -220,8 +282,9 @@ class ProductViewModel(
             try {
                 repository.deleteProduct(productId)
                 refreshProducts()
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
-                if (e is CancellationException) throw e
                 Log.e(TAG, "deleteProduct failed", e)
             }
         }
@@ -232,8 +295,9 @@ class ProductViewModel(
             try {
                 repository.clearAllProducts()
                 refreshProducts()
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
-                if (e is CancellationException) throw e
                 Log.e(TAG, "clearAllProducts failed", e)
             }
         }
@@ -244,8 +308,9 @@ class ProductViewModel(
             try {
                 repository.addProduct(product)
                 refreshProducts()
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
-                if (e is CancellationException) throw e
                 Log.e(TAG, "addProduct failed", e)
             }
         }
@@ -257,8 +322,9 @@ class ProductViewModel(
                 repository.updateProduct(product)
                 refreshProducts()
                 _uiState.value = UiState.MainList
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
-                if (e is CancellationException) throw e
                 Log.e(TAG, "updateProduct failed", e)
             }
         }

@@ -12,4 +12,6 @@ object Constants {
     const val NOTIFICATION_ID = 1
 
     const val DATE_FORMAT = "dd.MM.yyyy"
+
+    const val UPCOMING_EXPIRATION_DAYS_THRESHOLD = 2
 }

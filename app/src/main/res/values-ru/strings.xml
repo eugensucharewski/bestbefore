@@ -41,4 +41,16 @@
     <string name="filter_all">Все</string>
     <string name="filter_expired">Просроченные</string>
     <string name="filter_upcoming">Скоро истекают</string>
+    <string name="edit_product">Редактировать продукт</string>
+    <string name="save">Сохранить</string>
+    <string name="product_name">Название продукта</string>
+    <string name="expiration_date">Срок годности</string>
+    <string name="expiration_alerts_channel_name">Оповещения о сроке годности</string>
+    <string name="expiration_alert_title">Статус продукта изменился</string>
+    <string name="product_status_changed">Статус продукта \"%s\" изменился!</string>
+    <string name="multiple_products_status_changed">Статус %d продуктов изменился!</string>
+    <string name="check_time">Время проверки</string>
+    <string name="check_time_summary">Проверять срок годности каждый день в %s</string>
+    <string name="upcoming_threshold">Порог уведомления (дни)</string>
+    <string name="upcoming_threshold_summary">Оранжевый цвет для продуктов, истекающих через %d дн. или меньше</string>
 </resources>

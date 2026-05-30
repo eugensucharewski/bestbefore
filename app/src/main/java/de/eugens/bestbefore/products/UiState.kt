@@ -21,7 +21,7 @@ sealed interface UiState {
     
     object Settings : UiState
 
-    data class EditProduct(val product: Product) : UiState
+    data class EditProduct(val product: Product, val productBitmap: android.graphics.Bitmap? = null) : UiState
     
     data class Success(val products: List<Product>) : UiState
     

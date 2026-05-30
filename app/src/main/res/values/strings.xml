@@ -45,4 +45,12 @@
     <string name="save">Save</string>
     <string name="product_name">Product Name</string>
     <string name="expiration_date">Expiration Date</string>
+    <string name="expiration_alerts_channel_name">Expiration Alerts</string>
+    <string name="expiration_alert_title">Product Status Changed</string>
+    <string name="product_status_changed">Status of \"%s\" has changed!</string>
+    <string name="multiple_products_status_changed">%d products have changed status!</string>
+    <string name="check_time">Daily Check Time</string>
+    <string name="check_time_summary">Check for product expiration every day at %s</string>
+    <string name="upcoming_threshold">Upcoming expiration threshold (days)</string>
+    <string name="upcoming_threshold_summary">Show amber color for products expiring in %d days or less</string>
 </resources>

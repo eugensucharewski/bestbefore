@@ -41,4 +41,16 @@
     <string name="filter_all">Alle</string>
     <string name="filter_expired">Abgelaufen</string>
     <string name="filter_upcoming">Abgelaufen &amp; Bald</string>
+    <string name="edit_product">Produkt bearbeiten</string>
+    <string name="save">Speichern</string>
+    <string name="product_name">Produktname</string>
+    <string name="expiration_date">Ablaufdatum</string>
+    <string name="expiration_alerts_channel_name">Ablaufwarnungen</string>
+    <string name="expiration_alert_title">Produktstatus geändert</string>
+    <string name="product_status_changed">Status von \"%s\" hat sich geändert!</string>
+    <string name="multiple_products_status_changed">%d Produkte haben den Status geändert!</string>
+    <string name="check_time">Tägliche Prüfzeit</string>
+    <string name="check_time_summary">Haltbarkeit jeden Tag um %s prüfen</string>
+    <string name="upcoming_threshold">Schwellenwert für baldigen Ablauf (Tage)</string>
+    <string name="upcoming_threshold_summary">Gelbe Farbe für Produkte, die in %d Tagen oder weniger ablaufen</string>
 </resources>
