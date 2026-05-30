@@ -13,10 +13,9 @@ import de.eugens.bestbefore.R
 
 @Composable
 fun AuthScreen(viewModel: AuthViewModel) {
-    var email by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
-    var isSignUp by remember { mutableStateOf(false) }
-
+    val email by viewModel.email.collectAsState()
+    val password by viewModel.password.collectAsState()
+    val isSignUp by viewModel.isSignUp.collectAsState()
     val authState by viewModel.authState.collectAsState()
 
     Column(
@@ -33,13 +32,13 @@ fun AuthScreen(viewModel: AuthViewModel) {
         Spacer(modifier = Modifier.height(16.dp))
         OutlinedTextField(
             value = email,
-            onValueChange = { email = it },
+            onValueChange = { viewModel.onAction(AuthIntent.UpdateEmail(it)) },
             label = { Text(stringResource(R.string.email)) },
             modifier = Modifier.fillMaxWidth()
         )
         OutlinedTextField(
             value = password,
-            onValueChange = { password = it },
+            onValueChange = { viewModel.onAction(AuthIntent.UpdatePassword(it)) },
             label = { Text(stringResource(R.string.password)) },
             visualTransformation = PasswordVisualTransformation(),
             modifier = Modifier.fillMaxWidth()
@@ -58,7 +57,7 @@ fun AuthScreen(viewModel: AuthViewModel) {
             ) {
                 Text(if (isSignUp) stringResource(R.string.sign_up_button) else stringResource(R.string.sign_in_button))
             }
-            TextButton(onClick = { isSignUp = !isSignUp }) {
+            TextButton(onClick = { viewModel.onAction(AuthIntent.ToggleMode) }) {
                 Text(if (isSignUp) stringResource(R.string.already_have_account) else stringResource(
                     R.string.no_account))
             }
