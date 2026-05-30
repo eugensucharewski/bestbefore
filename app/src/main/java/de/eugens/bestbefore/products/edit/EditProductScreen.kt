@@ -21,7 +21,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import de.eugens.bestbefore.R
-import de.eugens.bestbefore.products.Product
+import de.eugens.bestbefore.products.domain.model.Product
 
 @Composable
 fun EditProductScreen(

@@ -1,5 +1,7 @@
 package de.eugens.bestbefore.products
 
+import de.eugens.bestbefore.products.domain.model.Product
+import de.eugens.bestbefore.products.domain.model.ScannedItem
 import kotlinx.serialization.Serializable
 
 enum class ProductFilter {

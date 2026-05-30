@@ -5,17 +5,20 @@ import android.graphics.BitmapFactory
 import android.util.Base64
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import de.eugens.bestbefore.products.Product
-import de.eugens.bestbefore.products.ProductRepository
+import dagger.hilt.android.lifecycle.HiltViewModel
+import de.eugens.bestbefore.products.domain.usecase.UpdateProductUseCase
+import de.eugens.bestbefore.products.domain.model.Product
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import javax.inject.Inject
 
-class EditProductViewModel(
-    private val repository: ProductRepository = ProductRepository()
+@HiltViewModel
+class EditProductViewModel @Inject constructor(
+    private val updateProductUseCase: UpdateProductUseCase
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(EditProductUiState())
@@ -57,7 +60,7 @@ class EditProductViewModel(
     fun saveProduct(onSuccess: () -> Unit) {
         viewModelScope.launch {
             try {
-                repository.updateProduct(_uiState.value.product)
+                updateProductUseCase(_uiState.value.product)
                 onSuccess()
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(error = e.message)

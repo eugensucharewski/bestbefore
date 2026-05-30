@@ -1,14 +1,17 @@
 package de.eugens.bestbefore.products
 
-import android.app.Application
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.util.Base64
 import android.util.Log
-import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import dagger.hilt.android.lifecycle.HiltViewModel
 import de.eugens.bestbefore.Constants
-import de.eugens.bestbefore.worker.WorkerUtils
+import de.eugens.bestbefore.products.domain.model.Product
+import de.eugens.bestbefore.products.domain.model.ScannedItem
+import de.eugens.bestbefore.settings.domain.repository.SettingsRepository
+import de.eugens.bestbefore.products.domain.usecase.*
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -24,6 +27,7 @@ import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
+import javax.inject.Inject
 
 sealed class ProductIntent {
     data object LoadProducts : ProductIntent()
@@ -56,10 +60,19 @@ data class ProductUiModel(
     val status: ExpirationStatus
 )
 
-class ProductViewModel(application: Application) : AndroidViewModel(application) {
+@HiltViewModel
+class ProductViewModel @Inject constructor(
+    private val getProductsUseCase: GetProductsUseCase,
+    private val addProductUseCase: AddProductUseCase,
+    private val updateProductUseCase: UpdateProductUseCase,
+    private val deleteProductUseCase: DeleteProductUseCase,
+    private val clearAllProductsUseCase: ClearAllProductsUseCase,
+    private val analyzeImagesUseCase: AnalyzeImagesUseCase,
+    private val saveAnalysisResultsUseCase: SaveAnalysisResultsUseCase,
+    settingsRepository: SettingsRepository
+) : ViewModel() {
 
     private val formatter = DateTimeFormatter.ofPattern(Constants.DATE_FORMAT)
-    private val repository = ProductRepository()
 
     companion object {
         private const val TAG = "ProductViewModel"
@@ -79,7 +92,7 @@ class ProductViewModel(application: Application) : AndroidViewModel(application)
     private val _filteredProducts = MutableStateFlow<List<ProductUiModel>>(emptyList())
     val products: StateFlow<List<ProductUiModel>> = _filteredProducts.asStateFlow()
 
-    val threshold = WorkerUtils.getExpirationThresholdFlow(application)
+    val threshold = settingsRepository.getExpirationThresholdFlow()
         .stateIn(viewModelScope, SharingStarted.Eagerly, Constants.UPCOMING_EXPIRATION_DAYS_THRESHOLD)
 
     init {
@@ -194,7 +207,7 @@ class ProductViewModel(application: Application) : AndroidViewModel(application)
 
     private suspend fun refreshProducts() {
         try {
-            _products.value = repository.getProducts()
+            _products.value = getProductsUseCase()
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -262,8 +275,8 @@ class ProductViewModel(application: Application) : AndroidViewModel(application)
 
         viewModelScope.launch {
             try {
-                val results = repository.analyzeImages(items)
-                repository.saveAnalysisResults(results, items)
+                val results = analyzeImagesUseCase(items)
+                saveAnalysisResultsUseCase(results, items)
 
                 refreshProducts()
                 _uiState.value = UiState.MainList
@@ -280,7 +293,7 @@ class ProductViewModel(application: Application) : AndroidViewModel(application)
     private fun deleteProduct(productId: String) {
         viewModelScope.launch {
             try {
-                repository.deleteProduct(productId)
+                deleteProductUseCase(productId)
                 refreshProducts()
             } catch (e: CancellationException) {
                 throw e
@@ -293,7 +306,7 @@ class ProductViewModel(application: Application) : AndroidViewModel(application)
     private fun clearAllProducts() {
         viewModelScope.launch {
             try {
-                repository.clearAllProducts()
+                clearAllProductsUseCase()
                 refreshProducts()
             } catch (e: CancellationException) {
                 throw e
@@ -306,7 +319,7 @@ class ProductViewModel(application: Application) : AndroidViewModel(application)
     private fun addProduct(product: Product) {
         viewModelScope.launch {
             try {
-                repository.addProduct(product)
+                addProductUseCase(product)
                 refreshProducts()
             } catch (e: CancellationException) {
                 throw e
@@ -319,7 +332,7 @@ class ProductViewModel(application: Application) : AndroidViewModel(application)
     private fun updateProduct(product: Product) {
         viewModelScope.launch {
             try {
-                repository.updateProduct(product)
+                updateProductUseCase(product)
                 refreshProducts()
                 _uiState.value = UiState.MainList
             } catch (e: CancellationException) {

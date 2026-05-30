@@ -10,24 +10,34 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.lifecycleScope
+import dagger.hilt.android.AndroidEntryPoint
+import de.eugens.bestbefore.settings.domain.repository.SettingsRepository
 import de.eugens.bestbefore.products.ProductFilter
 import de.eugens.bestbefore.products.ProductIntent
 import de.eugens.bestbefore.products.ProductViewModel
 import de.eugens.bestbefore.products.ProductsScreen
 import de.eugens.bestbefore.ui.theme.BestBeforeTheme
-import de.eugens.bestbefore.worker.WorkerUtils
+import de.eugens.bestbefore.worker.ExpirationWorkScheduler
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 
+@AndroidEntryPoint
 class MainActivity : AppCompatActivity() {
     private val productViewModel: ProductViewModel by viewModels()
+
+    @Inject
+    lateinit var workScheduler: ExpirationWorkScheduler
+
+    @Inject
+    lateinit var settingsRepository: SettingsRepository
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         // Initialize daily check
         lifecycleScope.launch {
-            val (hour, minute) = WorkerUtils.getCheckTime(this@MainActivity)
-            WorkerUtils.scheduleDailyCheck(this@MainActivity, hour, minute)
+            val (hour, minute) = settingsRepository.getCheckTime()
+            workScheduler.scheduleDailyCheck(hour, minute)
         }
 
         handleIntent(intent)

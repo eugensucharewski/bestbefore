@@ -1,7 +1,8 @@
-package de.eugens.bestbefore.products
+package de.eugens.bestbefore.products.data
 
 import android.graphics.Bitmap
 import android.util.Base64
+import androidx.core.graphics.scale
 import com.google.ai.client.generativeai.GenerativeModel
 import com.google.ai.client.generativeai.type.content
 import com.google.ai.client.generativeai.type.generationConfig
@@ -10,14 +11,20 @@ import com.google.firebase.auth.auth
 import com.google.firebase.firestore.firestore
 import de.eugens.bestbefore.BuildConfig
 import de.eugens.bestbefore.Constants
+import de.eugens.bestbefore.products.domain.model.ExpirationInfo
+import de.eugens.bestbefore.products.domain.model.Product
+import de.eugens.bestbefore.products.domain.model.ScannedItem
+import de.eugens.bestbefore.products.domain.repository.ProductRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import java.io.ByteArrayOutputStream
-import androidx.core.graphics.scale
+import javax.inject.Inject
+import javax.inject.Singleton
 
-class ProductRepository {
+@Singleton
+class FirebaseProductRepository @Inject constructor() : ProductRepository {
 
     companion object {
         private const val NAME = "name"
@@ -50,7 +57,7 @@ class ProductRepository {
         }
     )
 
-    suspend fun getProducts(): List<Product> = withContext(Dispatchers.IO) {
+    override suspend fun getProducts(): List<Product> = withContext(Dispatchers.IO) {
         val currentUser = auth.currentUser ?: return@withContext emptyList()
         val snapshot = db.collection(Constants.COLLECTION_PRODUCTS)
             .whereEqualTo(Constants.FIELD_USER_ID, currentUser.uid)
@@ -60,11 +67,13 @@ class ProductRepository {
         }
     }
 
-    suspend fun deleteProduct(productId: String) = withContext(Dispatchers.IO) {
-        db.collection(Constants.COLLECTION_PRODUCTS).document(productId).delete().await()
+    override suspend fun deleteProduct(productId: String) {
+        withContext(Dispatchers.IO) {
+            db.collection(Constants.COLLECTION_PRODUCTS).document(productId).delete().await()
+        }
     }
 
-    suspend fun clearAllProducts() = withContext(Dispatchers.IO) {
+    override suspend fun clearAllProducts() = withContext(Dispatchers.IO) {
         val currentUser = auth.currentUser ?: return@withContext
         val snapshot = db.collection(Constants.COLLECTION_PRODUCTS)
             .whereEqualTo(Constants.FIELD_USER_ID, currentUser.uid)
@@ -74,36 +83,40 @@ class ProductRepository {
         }
     }
 
-    suspend fun addProduct(product: Product) = withContext(Dispatchers.IO) {
-        val currentUser = auth.currentUser
-        val productMap = hashMapOf(
-            NAME to product.name,
-            EXPIRATION_DATE to product.expirationDate,
-            PRODUCTION_DATE to product.productionDate,
-            CONFIDENCE to product.confidence,
-            RAW_TEXT to product.rawText,
-            PRODUCT_IMAGE to product.productImage,
-            Constants.FIELD_USER_ID to currentUser?.uid
-        )
-        db.collection(Constants.COLLECTION_PRODUCTS).add(productMap).await()
+    override suspend fun addProduct(product: Product) {
+        withContext(Dispatchers.IO) {
+            val currentUser = auth.currentUser
+            val productMap = hashMapOf(
+                NAME to product.name,
+                EXPIRATION_DATE to product.expirationDate,
+                PRODUCTION_DATE to product.productionDate,
+                CONFIDENCE to product.confidence,
+                RAW_TEXT to product.rawText,
+                PRODUCT_IMAGE to product.productImage,
+                Constants.FIELD_USER_ID to currentUser?.uid
+            )
+            db.collection(Constants.COLLECTION_PRODUCTS).add(productMap).await()
+        }
     }
 
-    suspend fun updateProduct(product: Product) = withContext(Dispatchers.IO) {
-        val currentUser = auth.currentUser
-        val productMap = hashMapOf(
-            NAME to product.name,
-            EXPIRATION_DATE to product.expirationDate,
-            PRODUCTION_DATE to product.productionDate,
-            CONFIDENCE to product.confidence,
-            RAW_TEXT to product.rawText,
-            PRODUCT_IMAGE to product.productImage,
-            Constants.FIELD_USER_ID to currentUser?.uid
-        )
-        db.collection(Constants.COLLECTION_PRODUCTS)
-            .document(product.id).set(productMap).await()
+    override suspend fun updateProduct(product: Product) {
+        withContext(Dispatchers.IO) {
+            val currentUser = auth.currentUser
+            val productMap = hashMapOf(
+                NAME to product.name,
+                EXPIRATION_DATE to product.expirationDate,
+                PRODUCTION_DATE to product.productionDate,
+                CONFIDENCE to product.confidence,
+                RAW_TEXT to product.rawText,
+                PRODUCT_IMAGE to product.productImage,
+                Constants.FIELD_USER_ID to currentUser?.uid
+            )
+            db.collection(Constants.COLLECTION_PRODUCTS)
+                .document(product.id).set(productMap).await()
+        }
     }
 
-    suspend fun analyzeImages(items: List<ScannedItem>): List<ExpirationInfo> =
+    override suspend fun analyzeImages(items: List<ScannedItem>): List<ExpirationInfo> =
         withContext(Dispatchers.IO) {
             val prompt = ANALYZE_PROMPT
 
@@ -121,7 +134,7 @@ class ProductRepository {
             json.decodeFromString<List<ExpirationInfo>>(outputContent)
         }
 
-    suspend fun saveAnalysisResults(results: List<ExpirationInfo>, items: List<ScannedItem>) =
+    override suspend fun saveAnalysisResults(results: List<ExpirationInfo>, items: List<ScannedItem>) {
         withContext(Dispatchers.IO) {
             val currentUser = auth.currentUser
             results.forEachIndexed { index, info ->
@@ -140,6 +153,7 @@ class ProductRepository {
                 db.collection(Constants.COLLECTION_PRODUCTS).add(productMap).await()
             }
         }
+    }
 
     private fun resizeAndEncodeBitmap(bitmap: Bitmap): String {
         val ratio =

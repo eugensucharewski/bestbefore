@@ -22,6 +22,7 @@ import de.eugens.bestbefore.auth.AuthIntent
 import de.eugens.bestbefore.auth.AuthState
 import de.eugens.bestbefore.auth.AuthViewModel
 import de.eugens.bestbefore.auth.AuthScreen
+import de.eugens.bestbefore.products.domain.model.Product
 import de.eugens.bestbefore.products.edit.EditProductScreen
 import de.eugens.bestbefore.products.edit.EditProductViewModel
 import de.eugens.bestbefore.settings.SettingsScreen

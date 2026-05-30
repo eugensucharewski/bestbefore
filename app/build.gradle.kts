@@ -3,6 +3,8 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.google.gms.google.services)
     alias(libs.plugins.secrets)
+    alias(libs.plugins.hilt)
+    alias(libs.plugins.ksp)
     kotlin("plugin.serialization") version "2.2.10"
 }
 
@@ -75,6 +77,12 @@ dependencies {
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.accompanist.permissions)
     implementation(libs.kotlinx.serialization.json)
+
+    implementation(libs.hilt.android)
+    ksp(libs.hilt.compiler)
+    implementation(libs.androidx.hilt.work)
+    ksp(libs.androidx.hilt.compiler)
+
     testImplementation(libs.junit)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)

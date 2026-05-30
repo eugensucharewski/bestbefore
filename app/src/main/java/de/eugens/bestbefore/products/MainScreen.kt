@@ -1,5 +1,7 @@
 package de.eugens.bestbefore.products
 
+import de.eugens.bestbefore.products.domain.model.Product
+
 import android.graphics.BitmapFactory
 import android.util.Base64
 import android.util.Log

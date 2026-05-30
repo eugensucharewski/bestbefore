@@ -6,28 +6,34 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import androidx.core.app.NotificationCompat
+import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
+import dagger.assisted.Assisted
+import dagger.assisted.AssistedInject
 import de.eugens.bestbefore.Constants
 import de.eugens.bestbefore.MainActivity
 import de.eugens.bestbefore.R
-import de.eugens.bestbefore.products.Product
-import de.eugens.bestbefore.products.ProductRepository
+import de.eugens.bestbefore.products.domain.repository.ProductRepository
+import de.eugens.bestbefore.settings.domain.repository.SettingsRepository
+import de.eugens.bestbefore.products.domain.model.Product
 import kotlinx.coroutines.flow.first
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 
-class ExpirationCheckWorker(
-    context: Context,
-    workerParams: WorkerParameters
+@HiltWorker
+class ExpirationCheckWorker @AssistedInject constructor(
+    @Assisted context: Context,
+    @Assisted workerParams: WorkerParameters,
+    private val repository: ProductRepository,
+    private val settingsRepository: SettingsRepository
 ) : CoroutineWorker(context, workerParams) {
 
-    private val repository = ProductRepository()
     private val formatter = DateTimeFormatter.ofPattern(Constants.DATE_FORMAT)
 
     override suspend fun doWork(): Result {
-        val threshold = WorkerUtils.getExpirationThresholdFlow(applicationContext).first()
+        val threshold = settingsRepository.getExpirationThresholdFlow().first()
         val products = repository.getProducts()
         val today = LocalDate.now()
         val yesterday = today.minusDays(1)

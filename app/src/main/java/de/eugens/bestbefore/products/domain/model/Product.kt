@@ -1,4 +1,4 @@
-package de.eugens.bestbefore.products
+package de.eugens.bestbefore.products.domain.model
 
 import android.graphics.Bitmap
 import kotlinx.serialization.Serializable
@@ -19,8 +19,3 @@ data class ScannedItem(
     val productBitmap: Bitmap? = null,
     val dateBitmap: Bitmap? = null
 )
-
-enum class ScanStep {
-    PRODUCT_PHOTO,
-    DATE_PHOTO
-}
