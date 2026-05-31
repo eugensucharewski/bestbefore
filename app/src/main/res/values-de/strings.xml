@@ -7,6 +7,8 @@
     <string name="clear_confirm_title">Liste leeren?</string>
     <string name="clear_confirm_text">Sind Sie sicher, dass Sie alle Produkte aus der Liste löschen möchten?</string>
     <string name="clear_confirm_button">Alles löschen</string>
+    <string name="delete_confirm_title">Produkt löschen?</string>
+    <string name="delete_confirm_text">Sind Sie sicher, dass Sie \"%1$s\" löschen möchten?</string>
     <string name="cancel">Abbrechen</string>
     <string name="empty_list">Liste ist leer</string>
     <string name="deleted_message">Gelöscht: %s</string>
@@ -53,4 +55,8 @@
     <string name="check_time_summary">Haltbarkeit jeden Tag um %s prüfen</string>
     <string name="upcoming_threshold">Schwellenwert für baldigen Ablauf (Tage)</string>
     <string name="upcoming_threshold_summary">Gelbe Farbe für Produkte, die in %d Tagen oder weniger ablaufen</string>
+    <string name="selected_count">Ausgewählt: %d</string>
+    <string name="delete_selected">Ausgewählte löschen</string>
+    <string name="delete_selected_confirm_title">Ausgewählte Produkte löschen?</string>
+    <string name="delete_selected_confirm_text">Sind Sie sicher, dass Sie %d ausgewählte Produkte löschen möchten?</string>
 </resources>

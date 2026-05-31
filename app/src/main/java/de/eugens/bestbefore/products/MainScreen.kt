@@ -5,9 +5,10 @@ import de.eugens.bestbefore.products.domain.model.Product
 import android.graphics.BitmapFactory
 import android.util.Base64
 import android.util.Log
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -22,45 +23,60 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import de.eugens.bestbefore.R
-import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun MainScreen(
     products: List<ProductUiModel>,
     currentFilter: ProductFilter,
+    selectedProductIds: Set<String>,
     onFilterChange: (ProductFilter) -> Unit,
     onProductClick: (Product) -> Unit,
     onAddClick: () -> Unit,
-    onDeleteProduct: (Product) -> Unit,
-    onUndoDelete: (Product) -> Unit,
-    onClearAll: () -> Unit,
+    onToggleSelection: (String) -> Unit,
+    onClearSelection: () -> Unit,
+    onDeleteSelected: () -> Unit,
     onSettingsClick: () -> Unit
 ) {
-    val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
-    val scope = rememberCoroutineScope()
-    var showClearConfirm by remember { mutableStateOf(false) }
+    val isSelectionMode = selectedProductIds.isNotEmpty()
+    var showDeleteSelectedConfirm by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.main_title)) },
-                actions = {
-                    if (products.isNotEmpty() || currentFilter != ProductFilter.ALL) {
-                        IconButton(onClick = { showClearConfirm = true }) {
-                            Icon(Icons.Default.DeleteSweep, contentDescription = stringResource(R.string.clear_all))
+                title = {
+                    if (isSelectionMode) {
+                        Text(stringResource(R.string.selected_count, selectedProductIds.size))
+                    } else {
+                        Text(stringResource(R.string.main_title))
+                    }
+                },
+                navigationIcon = {
+                    if (isSelectionMode) {
+                        IconButton(onClick = onClearSelection) {
+                            Icon(Icons.Default.Close, contentDescription = stringResource(R.string.cancel))
                         }
                     }
-                    IconButton(onClick = onSettingsClick) {
-                        Icon(Icons.Default.Settings, contentDescription = stringResource(R.string.settings))
+                },
+                actions = {
+                    if (isSelectionMode) {
+                        IconButton(onClick = { showDeleteSelectedConfirm = true }) {
+                            Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.delete_selected))
+                        }
+                    } else {
+                        IconButton(onClick = onSettingsClick) {
+                            Icon(Icons.Default.Settings, contentDescription = stringResource(R.string.settings))
+                        }
                     }
                 }
             )
@@ -72,19 +88,26 @@ fun MainScreen(
             }
         }
     ) { padding ->
-        if (showClearConfirm) {
+        if (showDeleteSelectedConfirm) {
             AlertDialog(
-                onDismissRequest = { showClearConfirm = false },
-                title = { Text(stringResource(R.string.clear_confirm_title)) },
-                text = { Text(stringResource(R.string.clear_confirm_text)) },
+                onDismissRequest = { showDeleteSelectedConfirm = false },
+                title = { Text(stringResource(R.string.delete_selected_confirm_title)) },
+                text = { Text(stringResource(R.string.delete_selected_confirm_text, selectedProductIds.size)) },
                 confirmButton = {
-                    TextButton(onClick = {
-                        onClearAll()
-                        showClearConfirm = false
-                    }) { Text(stringResource(R.string.clear_confirm_button)) }
+                    TextButton(
+                        onClick = {
+                            onDeleteSelected()
+                            showDeleteSelectedConfirm = false
+                        },
+                        colors = ButtonDefaults.textButtonColors(contentColor = Color.Red)
+                    ) {
+                        Text(stringResource(R.string.delete))
+                    }
                 },
                 dismissButton = {
-                    TextButton(onClick = { showClearConfirm = false }) { Text(stringResource(R.string.cancel)) }
+                    TextButton(onClick = { showDeleteSelectedConfirm = false }) {
+                        Text(stringResource(R.string.cancel))
+                    }
                 }
             )
         }
@@ -110,53 +133,13 @@ fun MainScreen(
             } else {
                 LazyColumn(modifier = Modifier.fillMaxSize()) {
                     items(products, key = { it.product.id }) { uiModel ->
-                        val dismissState = rememberSwipeToDismissBoxState(
-                            positionalThreshold = { it * 0.7f }
+                        ProductItem(
+                            uiModel = uiModel,
+                            isSelected = selectedProductIds.contains(uiModel.product.id),
+                            isSelectionMode = isSelectionMode,
+                            onProductClick = onProductClick,
+                            onToggleSelection = onToggleSelection
                         )
-
-                        LaunchedEffect(dismissState.currentValue) {
-                            if (dismissState.currentValue != SwipeToDismissBoxValue.Settled) {
-                                onDeleteProduct(uiModel.product)
-                                scope.launch {
-                                    val result = snackbarHostState.showSnackbar(
-                                        message = context.getString(R.string.deleted_message, uiModel.product.name),
-                                        actionLabel = context.getString(R.string.undo),
-                                        duration = SnackbarDuration.Short
-                                    )
-                                    if (result == SnackbarResult.ActionPerformed) {
-                                        onUndoDelete(uiModel.product)
-                                    }
-                                }
-                            }
-                        }
-
-                        SwipeToDismissBox(
-                            state = dismissState,
-                            enableDismissFromStartToEnd = false,
-                            backgroundContent = {
-                                val color = when (dismissState.dismissDirection) {
-                                    SwipeToDismissBoxValue.EndToStart -> Color.Red
-                                    else -> Color.Transparent
-                                }
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .background(color)
-                                        .padding(horizontal = 20.dp),
-                                    contentAlignment = Alignment.CenterEnd
-                                ) {
-                                    if (dismissState.dismissDirection == SwipeToDismissBoxValue.EndToStart) {
-                                        Icon(
-                                            Icons.Default.Delete,
-                                            contentDescription = stringResource(R.string.delete),
-                                            tint = Color.White
-                                        )
-                                    }
-                                }
-                            }
-                        ) {
-                            ProductItem(uiModel, onProductClick)
-                        }
                     }
                 }
             }
@@ -192,9 +175,17 @@ fun FilterChips(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun ProductItem(uiModel: ProductUiModel, onProductClick: (Product) -> Unit) {
+fun ProductItem(
+    uiModel: ProductUiModel,
+    isSelected: Boolean,
+    isSelectionMode: Boolean,
+    onProductClick: (Product) -> Unit,
+    onToggleSelection: (String) -> Unit
+) {
     val product = uiModel.product
+    val haptic = LocalHapticFeedback.current
     val bitmap = remember(product.productImage) {
         product.productImage?.let {
             try {
@@ -218,18 +209,44 @@ fun ProductItem(uiModel: ProductUiModel, onProductClick: (Product) -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .padding(8.dp)
-            .clickable(onClick = {
-                onProductClick.invoke(product)
-            }),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            .combinedClickable(
+                onClick = {
+                    if (isSelectionMode) {
+                        onToggleSelection(product.id)
+                    } else {
+                        onProductClick(product)
+                    }
+                },
+                onLongClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onToggleSelection(product.id)
+                }
+            ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        colors = if (isSelected) {
+            CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+        } else {
+            CardDefaults.cardColors()
+        }
     ) {
-        Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                modifier = Modifier
-                    .size(12.dp)
-                    .background(statusColor, CircleShape)
-            )
-            Spacer(modifier = Modifier.width(16.dp))
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (isSelectionMode) {
+                Checkbox(
+                    checked = isSelected,
+                    onCheckedChange = { onToggleSelection(product.id) }
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+            } else {
+                Box(
+                    modifier = Modifier
+                        .size(12.dp)
+                        .background(statusColor, CircleShape)
+                )
+                Spacer(modifier = Modifier.width(16.dp))
+            }
 
             if (bitmap != null) {
                 Image(

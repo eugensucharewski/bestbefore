@@ -7,6 +7,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import de.eugens.bestbefore.products.domain.usecase.UpdateProductUseCase
+import de.eugens.bestbefore.products.domain.usecase.DeleteProductUseCase
 import de.eugens.bestbefore.products.domain.model.Product
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -18,7 +19,8 @@ import javax.inject.Inject
 
 @HiltViewModel
 class EditProductViewModel @Inject constructor(
-    private val updateProductUseCase: UpdateProductUseCase
+    private val updateProductUseCase: UpdateProductUseCase,
+    private val deleteProductUseCase: DeleteProductUseCase
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(EditProductUiState())
@@ -61,6 +63,17 @@ class EditProductViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 updateProductUseCase(_uiState.value.product)
+                onSuccess()
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(error = e.message)
+            }
+        }
+    }
+
+    fun deleteProduct(onSuccess: () -> Unit) {
+        viewModelScope.launch {
+            try {
+                deleteProductUseCase(_uiState.value.product.id)
                 onSuccess()
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(error = e.message)

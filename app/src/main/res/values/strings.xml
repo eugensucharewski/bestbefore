@@ -7,6 +7,8 @@
     <string name="clear_confirm_title">Clear the list?</string>
     <string name="clear_confirm_text">Are you sure you want to delete all products from the list?</string>
     <string name="clear_confirm_button">Delete All</string>
+    <string name="delete_confirm_title">Delete product?</string>
+    <string name="delete_confirm_text">Are you sure you want to delete \"%1$s\"?</string>
     <string name="cancel">Cancel</string>
     <string name="empty_list">List is empty</string>
     <string name="deleted_message">Deleted: %s</string>
@@ -53,4 +55,8 @@
     <string name="check_time_summary">Check for product expiration every day at %s</string>
     <string name="upcoming_threshold">Upcoming expiration threshold (days)</string>
     <string name="upcoming_threshold_summary">Show amber color for products expiring in %d days or less</string>
+    <string name="selected_count">Selected: %d</string>
+    <string name="delete_selected">Delete Selected</string>
+    <string name="delete_selected_confirm_title">Delete selected products?</string>
+    <string name="delete_selected_confirm_text">Are you sure you want to delete %d selected products?</string>
 </resources>

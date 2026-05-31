@@ -47,12 +47,16 @@ sealed class ProductIntent {
     data class ProcessCapturedImage(val image: ImageProxy) : ProductIntent()
     data class CapturePhoto(val bitmap: Bitmap) : ProductIntent()
     data object FinishScanning : ProductIntent()
-    data class DeleteProduct(val productId: String) : ProductIntent()
-    data object ClearAllProducts : ProductIntent()
+    data class DeleteProduct(val product: Product) : ProductIntent()
+    data object ConfirmDelete : ProductIntent()
+    data object DismissDelete : ProductIntent()
     data class AddProduct(val product: Product) : ProductIntent()
     data class SetFilter(val filter: ProductFilter) : ProductIntent()
     data class SelectProductForEdit(val product: Product) : ProductIntent()
     data class UpdateProduct(val product: Product) : ProductIntent()
+    data class ToggleSelection(val productId: String) : ProductIntent()
+    data object ClearSelection : ProductIntent()
+    data object DeleteSelectedProducts : ProductIntent()
 }
 
 sealed class ProductEvent {
@@ -73,7 +77,9 @@ data class ProductScreenState(
     val products: List<ProductUiModel> = emptyList(),
     val currentFilter: ProductFilter = ProductFilter.ALL,
     val authState: AuthState = AuthState.Unauthenticated,
-    val backStack: List<UiState> = listOf(UiState.MainList)
+    val backStack: List<UiState> = listOf(UiState.MainList),
+    val productToDelete: Product? = null,
+    val selectedProductIds: Set<String> = emptySet()
 )
 
 @HiltViewModel
@@ -103,6 +109,8 @@ class ProductViewModel @Inject constructor(
     private val _backStack: MutableStateFlow<List<UiState>> = MutableStateFlow(listOf(UiState.MainList))
     private val _products = MutableStateFlow<List<Product>>(emptyList())
     private val _currentFilter = MutableStateFlow(ProductFilter.ALL)
+    private val _productToDelete = MutableStateFlow<Product?>(null)
+    private val _selectedProductIds = MutableStateFlow<Set<String>>(emptySet())
 
     private val threshold = settingsRepository.getExpirationThresholdFlow()
         .stateIn(viewModelScope, SharingStarted.Eagerly, Constants.UPCOMING_EXPIRATION_DAYS_THRESHOLD)
@@ -111,11 +119,21 @@ class ProductViewModel @Inject constructor(
         _backStack,
         _products,
         _currentFilter,
+        _productToDelete,
+        _selectedProductIds,
         threshold,
         authRepository.observeAuthState().onStart {
             emit(authRepository.currentUserEmail?.let { AuthState.Authenticated(it) } ?: AuthState.Unauthenticated)
         }
-    ) { backStack, products, filter, thresholdValue, authState ->
+    ) { args ->
+        val backStack = args[0] as List<UiState>
+        val products = args[1] as List<Product>
+        val filter = args[2] as ProductFilter
+        val productToDelete = args[3] as? Product
+        val selectedProductIds = args[4] as Set<String>
+        val thresholdValue = args[5] as Int
+        val authState = args[6] as AuthState
+
         val filtered = applyFilter(products, filter, thresholdValue)
         val uiModels = sort(filtered).map { product ->
             ProductUiModel(product, getExpirationStatus(product, thresholdValue))
@@ -125,7 +143,9 @@ class ProductViewModel @Inject constructor(
             products = uiModels,
             currentFilter = filter,
             authState = authState,
-            backStack = backStack
+            backStack = backStack,
+            productToDelete = productToDelete,
+            selectedProductIds = selectedProductIds
         )
     }.stateIn(
         scope = viewModelScope,
@@ -198,12 +218,47 @@ class ProductViewModel @Inject constructor(
             is ProductIntent.ProcessCapturedImage -> processCapturedImage(intent.image)
             is ProductIntent.CapturePhoto -> capturePhoto(intent.bitmap)
             is ProductIntent.FinishScanning -> finishScanning()
-            is ProductIntent.DeleteProduct -> deleteProduct(intent.productId)
-            is ProductIntent.ClearAllProducts -> clearAllProducts()
+            is ProductIntent.DeleteProduct -> _productToDelete.value = intent.product
+            is ProductIntent.ConfirmDelete -> {
+                _productToDelete.value?.let { deleteProduct(it.id) }
+                _productToDelete.value = null
+            }
+            is ProductIntent.DismissDelete -> _productToDelete.value = null
             is ProductIntent.AddProduct -> addProduct(intent.product)
             is ProductIntent.SetFilter -> _currentFilter.value = intent.filter
             is ProductIntent.SelectProductForEdit -> selectProductForEdit(intent.product)
             is ProductIntent.UpdateProduct -> updateProduct(intent.product)
+            is ProductIntent.ToggleSelection -> toggleSelection(intent.productId)
+            is ProductIntent.ClearSelection -> _selectedProductIds.value = emptySet()
+            is ProductIntent.DeleteSelectedProducts -> deleteSelectedProducts()
+        }
+    }
+
+    private fun toggleSelection(productId: String) {
+        val current = _selectedProductIds.value
+        _selectedProductIds.value = if (current.contains(productId)) {
+            current - productId
+        } else {
+            current + productId
+        }
+    }
+
+    private fun deleteSelectedProducts() {
+        val idsToDelete = _selectedProductIds.value
+        if (idsToDelete.isEmpty()) return
+        
+        viewModelScope.launch {
+            try {
+                idsToDelete.forEach { id ->
+                    deleteProductUseCase(id)
+                }
+                _selectedProductIds.value = emptySet()
+                refreshProducts()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e(TAG, "deleteSelectedProducts failed", e)
+            }
         }
     }
 
@@ -368,19 +423,6 @@ class ProductViewModel @Inject constructor(
                 throw e
             } catch (e: Exception) {
                 Log.e(TAG, "deleteProduct failed", e)
-            }
-        }
-    }
-
-    private fun clearAllProducts() {
-        viewModelScope.launch {
-            try {
-                clearAllProductsUseCase()
-                refreshProducts()
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                Log.e(TAG, "clearAllProducts failed", e)
             }
         }
     }

@@ -112,19 +112,26 @@ fun ProductsScreen(
             is AuthState.Authenticated -> {
                 NavDisplay(
                     backStack = state.backStack,
-                    onBack = { productViewModel.onAction(ProductIntent.CancelScanning) }
+                    onBack = {
+                        if (state.selectedProductIds.isNotEmpty()) {
+                            productViewModel.onAction(ProductIntent.ClearSelection)
+                        } else {
+                            productViewModel.onAction(ProductIntent.CancelScanning)
+                        }
+                    }
                 ) { uiState ->
                     NavEntry(uiState) {
                         when (uiState) {
                             is UiState.MainList -> MainScreen(
                                 products = state.products,
                                 currentFilter = state.currentFilter,
+                                selectedProductIds = state.selectedProductIds,
                                 onFilterChange = { productViewModel.onAction(ProductIntent.SetFilter(it)) },
                                 onProductClick = { productViewModel.onAction(ProductIntent.SelectProductForEdit(it)) },
                                 onAddClick = { productViewModel.onAction(ProductIntent.StartScanning) },
-                                onDeleteProduct = { productViewModel.onAction(ProductIntent.DeleteProduct(it.id)) },
-                                onUndoDelete = { productViewModel.onAction(ProductIntent.AddProduct(it)) },
-                                onClearAll = { productViewModel.onAction(ProductIntent.ClearAllProducts) },
+                                onToggleSelection = { productViewModel.onAction(ProductIntent.ToggleSelection(it)) },
+                                onClearSelection = { productViewModel.onAction(ProductIntent.ClearSelection) },
+                                onDeleteSelected = { productViewModel.onAction(ProductIntent.DeleteSelectedProducts) },
                                 onSettingsClick = { productViewModel.onAction(ProductIntent.OpenSettings) }
                             )
 
@@ -157,7 +164,13 @@ fun ProductsScreen(
                                 }
                                 EditProductScreen(
                                     viewModel = editProductViewModel,
-                                    onBack = { productViewModel.onAction(ProductIntent.CancelScanning) }
+                                    onBack = {
+                        if (state.selectedProductIds.isNotEmpty()) {
+                            productViewModel.onAction(ProductIntent.ClearSelection)
+                        } else {
+                            productViewModel.onAction(ProductIntent.CancelScanning)
+                        }
+                    }
                                 )
                             }
 

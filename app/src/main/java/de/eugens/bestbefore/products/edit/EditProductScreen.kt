@@ -10,9 +10,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
@@ -29,6 +31,31 @@ fun EditProductScreen(
     onBack: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+
+    if (showDeleteConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            title = { Text(stringResource(R.string.delete_confirm_title)) },
+            text = { Text(stringResource(R.string.delete_confirm_text, uiState.product.name)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.deleteProduct(onBack)
+                        showDeleteConfirm = false
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = Color.Red)
+                ) {
+                    Text(stringResource(R.string.delete))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirm = false }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            }
+        )
+    }
 
     EditProductContent(
         product = uiState.product,
@@ -38,7 +65,8 @@ fun EditProductScreen(
         onExpirationDateChange = viewModel::onExpirationDateChange,
         onSave = {
             viewModel.saveProduct(onBack)
-        }
+        },
+        onDeleteClick = { showDeleteConfirm = true }
     )
 }
 
@@ -50,7 +78,8 @@ fun EditProductContent(
     onBack: () -> Unit,
     onNameChange: (String) -> Unit,
     onExpirationDateChange: (String) -> Unit,
-    onSave: () -> Unit
+    onSave: () -> Unit,
+    onDeleteClick: () -> Unit
 ) {
     Scaffold(
         topBar = {
@@ -62,6 +91,9 @@ fun EditProductContent(
                     }
                 },
                 actions = {
+                    IconButton(onClick = onDeleteClick) {
+                        Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.delete))
+                    }
                     TextButton(onClick = onSave) {
                         Text(stringResource(R.string.save), fontWeight = FontWeight.Bold)
                     }
@@ -117,6 +149,7 @@ fun EditProductScreenPreview() {
         onBack = {},
         onNameChange = {},
         onExpirationDateChange = {},
-        onSave = {}
+        onSave = {},
+        onDeleteClick = {}
     )
 }

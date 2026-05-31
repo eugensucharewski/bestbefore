@@ -7,6 +7,8 @@
     <string name="clear_confirm_title">Очистить список?</string>
     <string name="clear_confirm_text">Вы уверены, что хотите удалить все продукты из списка?</string>
     <string name="clear_confirm_button">Удалить всё</string>
+    <string name="delete_confirm_title">Удалить продукт?</string>
+    <string name="delete_confirm_text">Вы уверены, что хотите удалить \"%1$s\"?</string>
     <string name="cancel">Отмена</string>
     <string name="empty_list">Список пуст</string>
     <string name="deleted_message">Удалено: %s</string>
@@ -53,4 +55,8 @@
     <string name="check_time_summary">Проверять срок годности каждый день в %s</string>
     <string name="upcoming_threshold">Порог уведомления (дни)</string>
     <string name="upcoming_threshold_summary">Оранжевый цвет для продуктов, истекающих через %d дн. или меньше</string>
+    <string name="selected_count">Выбрано: %d</string>
+    <string name="delete_selected">Удалить выбранные</string>
+    <string name="delete_selected_confirm_title">Удалить выбранные продукты?</string>
+    <string name="delete_selected_confirm_text">Вы уверены, что хотите удалить %d выбранных продуктов?</string>
 </resources>
