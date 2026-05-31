@@ -10,6 +10,7 @@ import android.os.Build
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.app.NotificationCompat
@@ -126,6 +127,7 @@ fun ProductsScreen(
                                 products = state.products,
                                 currentFilter = state.currentFilter,
                                 selectedProductIds = state.selectedProductIds,
+                                isLoading = state.isLoading,
                                 onFilterChange = { productViewModel.onAction(ProductIntent.SetFilter(it)) },
                                 onProductClick = { productViewModel.onAction(ProductIntent.SelectProductForEdit(it)) },
                                 onAddClick = { productViewModel.onAction(ProductIntent.StartScanning) },
@@ -181,6 +183,14 @@ fun ProductsScreen(
                             else -> {}
                         }
                     }
+                }
+            }
+            is AuthState.Loading -> {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator()
                 }
             }
             else -> AuthScreen(authViewModel)

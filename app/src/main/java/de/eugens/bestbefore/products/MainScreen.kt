@@ -5,6 +5,7 @@ import de.eugens.bestbefore.products.domain.model.Product
 import android.graphics.BitmapFactory
 import android.util.Base64
 import android.util.Log
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -21,6 +22,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -39,6 +42,7 @@ fun MainScreen(
     products: List<ProductUiModel>,
     currentFilter: ProductFilter,
     selectedProductIds: Set<String>,
+    isLoading: Boolean,
     onFilterChange: (ProductFilter) -> Unit,
     onProductClick: (Product) -> Unit,
     onAddClick: () -> Unit,
@@ -121,7 +125,13 @@ fun MainScreen(
                     .padding(horizontal = 16.dp, vertical = 8.dp)
             )
 
-            if (products.isEmpty()) {
+            if (isLoading) {
+                LazyColumn(modifier = Modifier.fillMaxSize()) {
+                    items(10) {
+                        ShimmerProductItem()
+                    }
+                }
+            } else if (products.isEmpty()) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
@@ -142,6 +152,73 @@ fun MainScreen(
                         )
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+fun ShimmerProductItem() {
+    val transition = rememberInfiniteTransition(label = "shimmer")
+    val translateAnim = transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1000f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ), label = "shimmer"
+    )
+
+    val shimmerColors = listOf(
+        Color.LightGray.copy(alpha = 0.6f),
+        Color.LightGray.copy(alpha = 0.2f),
+        Color.LightGray.copy(alpha = 0.6f),
+    )
+
+    val brush = Brush.linearGradient(
+        colors = shimmerColors,
+        start = Offset.Zero,
+        end = Offset(x = translateAnim.value, y = translateAnim.value)
+    )
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(8.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(12.dp)
+                    .clip(CircleShape)
+                    .background(brush)
+            )
+            Spacer(modifier = Modifier.width(16.dp))
+            Box(
+                modifier = Modifier
+                    .size(60.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(brush)
+            )
+            Spacer(modifier = Modifier.width(16.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(0.7f)
+                        .height(20.dp)
+                        .background(brush)
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(0.5f)
+                        .height(14.dp)
+                        .background(brush)
+                )
             }
         }
     }

@@ -76,10 +76,11 @@ data class ProductScreenState(
     val uiState: UiState = UiState.MainList,
     val products: List<ProductUiModel> = emptyList(),
     val currentFilter: ProductFilter = ProductFilter.ALL,
-    val authState: AuthState = AuthState.Unauthenticated,
+    val authState: AuthState = AuthState.Loading,
     val backStack: List<UiState> = listOf(UiState.MainList),
     val productToDelete: Product? = null,
-    val selectedProductIds: Set<String> = emptySet()
+    val selectedProductIds: Set<String> = emptySet(),
+    val isLoading: Boolean = false
 )
 
 @HiltViewModel
@@ -111,6 +112,7 @@ class ProductViewModel @Inject constructor(
     private val _currentFilter = MutableStateFlow(ProductFilter.ALL)
     private val _productToDelete = MutableStateFlow<Product?>(null)
     private val _selectedProductIds = MutableStateFlow<Set<String>>(emptySet())
+    private val _isLoading = MutableStateFlow(false)
 
     private val threshold = settingsRepository.getExpirationThresholdFlow()
         .stateIn(viewModelScope, SharingStarted.Eagerly, Constants.UPCOMING_EXPIRATION_DAYS_THRESHOLD)
@@ -121,6 +123,7 @@ class ProductViewModel @Inject constructor(
         _currentFilter,
         _productToDelete,
         _selectedProductIds,
+        _isLoading,
         threshold,
         authRepository.observeAuthState().onStart {
             emit(authRepository.currentUserEmail?.let { AuthState.Authenticated(it) } ?: AuthState.Unauthenticated)
@@ -131,8 +134,9 @@ class ProductViewModel @Inject constructor(
         val filter = args[2] as ProductFilter
         val productToDelete = args[3] as? Product
         val selectedProductIds = args[4] as Set<String>
-        val thresholdValue = args[5] as Int
-        val authState = args[6] as AuthState
+        val isLoading = args[5] as Boolean
+        val thresholdValue = args[6] as Int
+        val authState = args[7] as AuthState
 
         val filtered = applyFilter(products, filter, thresholdValue)
         val uiModels = sort(filtered).map { product ->
@@ -145,7 +149,8 @@ class ProductViewModel @Inject constructor(
             authState = authState,
             backStack = backStack,
             productToDelete = productToDelete,
-            selectedProductIds = selectedProductIds
+            selectedProductIds = selectedProductIds,
+            isLoading = isLoading
         )
     }.stateIn(
         scope = viewModelScope,
@@ -292,6 +297,7 @@ class ProductViewModel @Inject constructor(
     }
 
     private suspend fun refreshProducts() {
+        _isLoading.value = true
         try {
             _products.value = getProductsUseCase()
         } catch (e: CancellationException) {
@@ -299,6 +305,8 @@ class ProductViewModel @Inject constructor(
         } catch (e: Exception) {
             Log.e(TAG, "refreshProducts failed", e)
             _backStack.value = _backStack.value + UiState.Error(e.localizedMessage ?: "Failed to load products")
+        } finally {
+            _isLoading.value = false
         }
     }
 
