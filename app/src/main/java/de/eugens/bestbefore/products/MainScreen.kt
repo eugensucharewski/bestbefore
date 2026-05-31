@@ -110,7 +110,9 @@ fun MainScreen(
             } else {
                 LazyColumn(modifier = Modifier.fillMaxSize()) {
                     items(products, key = { it.product.id }) { uiModel ->
-                        val dismissState = rememberSwipeToDismissBoxState()
+                        val dismissState = rememberSwipeToDismissBoxState(
+                            positionalThreshold = { it * 0.7f }
+                        )
 
                         LaunchedEffect(dismissState.currentValue) {
                             if (dismissState.currentValue != SwipeToDismissBoxValue.Settled) {
@@ -130,24 +132,26 @@ fun MainScreen(
 
                         SwipeToDismissBox(
                             state = dismissState,
+                            enableDismissFromStartToEnd = false,
                             backgroundContent = {
                                 val color = when (dismissState.dismissDirection) {
-                                    SwipeToDismissBoxValue.StartToEnd -> Color.Red
                                     SwipeToDismissBoxValue.EndToStart -> Color.Red
-                                    SwipeToDismissBoxValue.Settled -> Color.Transparent
+                                    else -> Color.Transparent
                                 }
                                 Box(
                                     modifier = Modifier
                                         .fillMaxSize()
                                         .background(color)
                                         .padding(horizontal = 20.dp),
-                                    contentAlignment = if (dismissState.dismissDirection == SwipeToDismissBoxValue.StartToEnd) Alignment.CenterStart else Alignment.CenterEnd
+                                    contentAlignment = Alignment.CenterEnd
                                 ) {
-                                    Icon(
-                                        Icons.Default.Delete,
-                                        contentDescription = stringResource(R.string.delete),
-                                        tint = Color.White
-                                    )
+                                    if (dismissState.dismissDirection == SwipeToDismissBoxValue.EndToStart) {
+                                        Icon(
+                                            Icons.Default.Delete,
+                                            contentDescription = stringResource(R.string.delete),
+                                            tint = Color.White
+                                        )
+                                    }
                                 }
                             }
                         ) {

@@ -14,4 +14,13 @@ object Constants {
     const val DATE_FORMAT = "dd.MM.yyyy"
 
     const val UPCOMING_EXPIRATION_DAYS_THRESHOLD = 2
+
+    object Scanning {
+        const val CROP_LEFT = 0.1f
+        const val CROP_RIGHT = 0.9f
+        const val PRODUCT_TOP = 0.2f
+        const val PRODUCT_BOTTOM = 0.6f
+        const val DATE_TOP = 0.4f
+        const val DATE_BOTTOM = 0.55f
+    }
 }

@@ -1,9 +1,14 @@
 package de.eugens.bestbefore.products
 
+import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.util.Base64
 import android.util.Log
+import androidx.camera.core.ImageCapture
+import androidx.camera.core.ImageCaptureException
+import androidx.camera.core.ImageProxy
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -35,7 +40,8 @@ sealed class ProductIntent {
     data object CancelScanning : ProductIntent()
     data object OpenSettings : ProductIntent()
     data object BackToMain : ProductIntent()
-    data object RequestCapture : ProductIntent()
+    data class RequestCapture(val context: Context) : ProductIntent()
+    data class ProcessCapturedImage(val image: ImageProxy) : ProductIntent()
     data class CapturePhoto(val bitmap: Bitmap) : ProductIntent()
     data object FinishScanning : ProductIntent()
     data class DeleteProduct(val productId: String) : ProductIntent()
@@ -47,7 +53,6 @@ sealed class ProductIntent {
 }
 
 sealed class ProductEvent {
-    data object TriggerCapture : ProductEvent()
     data object NotifyCompletion : ProductEvent()
 }
 
@@ -69,8 +74,13 @@ class ProductViewModel @Inject constructor(
     private val clearAllProductsUseCase: ClearAllProductsUseCase,
     private val analyzeImagesUseCase: AnalyzeImagesUseCase,
     private val saveAnalysisResultsUseCase: SaveAnalysisResultsUseCase,
+    private val processImageUseCase: ProcessImageUseCase,
     settingsRepository: SettingsRepository
 ) : ViewModel() {
+
+    val imageCapture = ImageCapture.Builder()
+        .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
+        .build()
 
     private val formatter = DateTimeFormatter.ofPattern(Constants.DATE_FORMAT)
 
@@ -167,7 +177,8 @@ class ProductViewModel @Inject constructor(
             is ProductIntent.CancelScanning -> cancelScanning()
             is ProductIntent.OpenSettings -> openSettings()
             is ProductIntent.BackToMain -> backToMain()
-            is ProductIntent.RequestCapture -> requestCapture()
+            is ProductIntent.RequestCapture -> requestCapture(intent.context)
+            is ProductIntent.ProcessCapturedImage -> processCapturedImage(intent.image)
             is ProductIntent.CapturePhoto -> capturePhoto(intent.bitmap)
             is ProductIntent.FinishScanning -> finishScanning()
             is ProductIntent.DeleteProduct -> deleteProduct(intent.productId)
@@ -232,9 +243,36 @@ class ProductViewModel @Inject constructor(
         _uiState.value = UiState.MainList
     }
 
-    private fun requestCapture() {
-        viewModelScope.launch {
-            _events.emit(ProductEvent.TriggerCapture)
+    private fun requestCapture(context: Context) {
+        val mainExecutor = ContextCompat.getMainExecutor(context)
+        imageCapture.takePicture(
+            mainExecutor,
+            object : ImageCapture.OnImageCapturedCallback() {
+                override fun onCaptureSuccess(image: ImageProxy) {
+                    processCapturedImage(image)
+                }
+
+                override fun onError(exception: ImageCaptureException) {
+                    Log.e(TAG, "Photo capture failed: ${exception.message}", exception)
+                }
+            }
+        )
+    }
+
+    private fun processCapturedImage(image: ImageProxy) {
+        val currentState = _uiState.value
+        if (currentState is UiState.Scanning) {
+            viewModelScope.launch {
+                try {
+                    val bitmap = processImageUseCase(image, currentState.step)
+                    capturePhoto(bitmap)
+                } catch (e: Exception) {
+                    Log.e(TAG, "processCapturedImage failed", e)
+                    image.close()
+                }
+            }
+        } else {
+            image.close()
         }
     }
 

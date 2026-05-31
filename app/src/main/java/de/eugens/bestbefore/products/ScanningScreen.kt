@@ -1,14 +1,9 @@
 package de.eugens.bestbefore.products
 
-import android.content.Context
-import android.graphics.Bitmap
-import android.graphics.Matrix
 import android.util.Log
 import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageCapture
-import androidx.camera.core.ImageCaptureException
-import androidx.camera.core.ImageProxy
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.Canvas
@@ -36,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import de.eugens.bestbefore.Constants
 import de.eugens.bestbefore.R
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collectLatest
@@ -45,26 +41,16 @@ import androidx.camera.core.Preview as CameraPreview
 @Composable
 fun ScanningScreen(
     state: UiState.Scanning,
-    events: Flow<ProductEvent>,
+    imageCapture: ImageCapture,
     onCaptureClick: () -> Unit,
-    onCaptureResult: (Bitmap) -> Unit,
     onCancel: () -> Unit,
     onFinish: () -> Unit
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val previewView = remember { PreviewView(context) }
-    val imageCapture = remember { ImageCapture.Builder().build() }
     var isFlashOn by remember { mutableStateOf(false) }
     var camera by remember { mutableStateOf<Camera?>(null) }
-
-    LaunchedEffect(Unit) {
-        events.collectLatest { event ->
-            if (event is ProductEvent.TriggerCapture) {
-                takePhoto(context, imageCapture, state.step, onCaptureResult)
-            }
-        }
-    }
 
     LaunchedEffect(Unit) {
         val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
@@ -173,17 +159,17 @@ fun ScanningOverlay(step: ScanStep) {
     Canvas(modifier = Modifier.fillMaxSize()) {
         val maskRect = if (step == ScanStep.PRODUCT_PHOTO) {
             Rect(
-                left = size.width * 0.1f,
-                top = size.height * 0.2f,
-                right = size.width * 0.9f,
-                bottom = size.height * 0.6f
+                left = size.width * Constants.Scanning.CROP_LEFT,
+                top = size.height * Constants.Scanning.PRODUCT_TOP,
+                right = size.width * Constants.Scanning.CROP_RIGHT,
+                bottom = size.height * Constants.Scanning.PRODUCT_BOTTOM
             )
         } else {
             Rect(
-                left = size.width * 0.1f,
-                top = size.height * 0.4f,
-                right = size.width * 0.9f,
-                bottom = size.height * 0.55f
+                left = size.width * Constants.Scanning.CROP_LEFT,
+                top = size.height * Constants.Scanning.DATE_TOP,
+                right = size.width * Constants.Scanning.CROP_RIGHT,
+                bottom = size.height * Constants.Scanning.DATE_BOTTOM
             )
         }
 
@@ -195,68 +181,4 @@ fun ScanningOverlay(step: ScanStep) {
             drawRect(color = Color.Black.copy(alpha = 0.5f))
         }
     }
-}
-
-fun takePhoto(context: Context, imageCapture: ImageCapture, step: ScanStep, onPhotoTaken: (Bitmap) -> Unit) {
-    val mainExecutor = ContextCompat.getMainExecutor(context)
-    imageCapture.takePicture(
-        mainExecutor,
-        object : ImageCapture.OnImageCapturedCallback() {
-            override fun onCaptureSuccess(image: ImageProxy) {
-                // Move heavy bitmap processing to a background thread to avoid UI hangs
-                val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Default)
-                scope.launch {
-                    val bitmap = image.toBitmap()
-                    val matrix = Matrix()
-                    matrix.postRotate(image.imageInfo.rotationDegrees.toFloat())
-                    val rotatedBitmap = Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
-
-                    if (bitmap != rotatedBitmap) {
-                        bitmap.recycle()
-                    }
-
-                    val width = rotatedBitmap.width
-                    val height = rotatedBitmap.height
-
-                    val cropRect = if (step == ScanStep.PRODUCT_PHOTO) {
-                        android.graphics.Rect(
-                            (width * 0.1f).toInt(),
-                            (height * 0.2f).toInt(),
-                            (width * 0.9f).toInt(),
-                            (height * 0.6f).toInt()
-                        )
-                    } else {
-                        android.graphics.Rect(
-                            (width * 0.1f).toInt(),
-                            (height * 0.4f).toInt(),
-                            (width * 0.9f).toInt(),
-                            (height * 0.55f).toInt()
-                        )
-                    }
-
-                    val croppedBitmap = Bitmap.createBitmap(
-                        rotatedBitmap,
-                        cropRect.left,
-                        cropRect.top,
-                        cropRect.width(),
-                        cropRect.height()
-                    )
-
-                    if (rotatedBitmap != croppedBitmap) {
-                        rotatedBitmap.recycle()
-                    }
-
-                    // Return result to the main thread
-                    mainExecutor.execute {
-                        onPhotoTaken(croppedBitmap)
-                        image.close()
-                    }
-                }
-            }
-
-            override fun onError(exception: ImageCaptureException) {
-                Log.e("CameraX", "Photo capture failed: ${exception.message}", exception)
-            }
-        }
-    )
 }

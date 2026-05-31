@@ -10,6 +10,5 @@ interface ProductRepository {
     suspend fun clearAllProducts()
     suspend fun addProduct(product: Product)
     suspend fun updateProduct(product: Product)
-    suspend fun analyzeImages(items: List<ScannedItem>): List<ExpirationInfo>
     suspend fun saveAnalysisResults(results: List<ExpirationInfo>, items: List<ScannedItem>)
 }

@@ -4,9 +4,11 @@ import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
-import de.eugens.bestbefore.settings.data.DataStoreSettingsRepository
 import de.eugens.bestbefore.products.data.FirebaseProductRepository
+import de.eugens.bestbefore.products.data.GeminiProductAnalyzer
+import de.eugens.bestbefore.products.domain.analyzer.AIProductAnalyzer
 import de.eugens.bestbefore.products.domain.repository.ProductRepository
+import de.eugens.bestbefore.settings.data.DataStoreSettingsRepository
 import de.eugens.bestbefore.settings.domain.repository.SettingsRepository
 import javax.inject.Singleton
 
@@ -25,4 +27,10 @@ abstract class RepositoryModule {
     abstract fun bindProductRepository(
         productRepositoryImpl: FirebaseProductRepository
     ): ProductRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindAIProductAnalyzer(
+        geminiProductAnalyzerImpl: GeminiProductAnalyzer
+    ): AIProductAnalyzer
 }

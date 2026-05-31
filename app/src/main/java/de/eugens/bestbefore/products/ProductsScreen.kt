@@ -125,9 +125,8 @@ fun ProductsScreen(
                     )
                     is UiState.Scanning -> ScanningScreen(
                         state = state,
-                        events = productViewModel.events,
-                        onCaptureClick = { productViewModel.onAction(ProductIntent.RequestCapture) },
-                        onCaptureResult = { productViewModel.onAction(ProductIntent.CapturePhoto(it)) },
+                        imageCapture = productViewModel.imageCapture,
+                        onCaptureClick = { productViewModel.onAction(ProductIntent.RequestCapture(context)) },
                         onCancel = { productViewModel.onAction(ProductIntent.CancelScanning) },
                         onFinish = { productViewModel.onAction(ProductIntent.FinishScanning) }
                     )

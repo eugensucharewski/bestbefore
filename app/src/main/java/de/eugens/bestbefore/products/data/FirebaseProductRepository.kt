@@ -3,13 +3,9 @@ package de.eugens.bestbefore.products.data
 import android.graphics.Bitmap
 import android.util.Base64
 import androidx.core.graphics.scale
-import com.google.ai.client.generativeai.GenerativeModel
-import com.google.ai.client.generativeai.type.content
-import com.google.ai.client.generativeai.type.generationConfig
 import com.google.firebase.Firebase
 import com.google.firebase.auth.auth
 import com.google.firebase.firestore.firestore
-import de.eugens.bestbefore.BuildConfig
 import de.eugens.bestbefore.Constants
 import de.eugens.bestbefore.products.domain.model.ExpirationInfo
 import de.eugens.bestbefore.products.domain.model.Product
@@ -18,7 +14,6 @@ import de.eugens.bestbefore.products.domain.repository.ProductRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.json.Json
 import java.io.ByteArrayOutputStream
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -33,29 +28,10 @@ class FirebaseProductRepository @Inject constructor() : ProductRepository {
         private const val CONFIDENCE = "confidence"
         private const val RAW_TEXT = "rawText"
         private const val PRODUCT_IMAGE = "productImage"
-
-        const val GEMINI_MODEL_NAME = "gemini-flash-latest"
-        private const val SYSTEM_INSTRUCTION = "Ты — специализированный ассистент по распознаванию названий продуктов питания и их сроков годности. " +
-                "Для каждого изображения (фото продукта и фото даты) определи название продукта и срок годности. " +
-                "Верни массив JSON объектов с полями: productName (String), date_found (boolean), expiration_date (DD.MM.YYYY), production_date (YYYY-MM-DD), confidence (high/medium/low), raw_text_detected (string)."
-        private const val ANALYZE_PROMPT = "Проанализируй эти пары изображений. Каждая пара изображений - это фото продукта и его срока годности. " +
-                "Верни результат в виде JSON массива объектов ExpirationInfo."
     }
 
     private val db = Firebase.firestore
     private val auth = Firebase.auth
-    private val json = Json { ignoreUnknownKeys = true }
-
-    private val generativeModel = GenerativeModel(
-        modelName = GEMINI_MODEL_NAME,
-        apiKey = BuildConfig.GEMINI_API_KEY,
-        systemInstruction = content {
-            text(SYSTEM_INSTRUCTION)
-        },
-        generationConfig = generationConfig {
-            responseMimeType = "application/json"
-        }
-    )
 
     override suspend fun getProducts(): List<Product> = withContext(Dispatchers.IO) {
         val currentUser = auth.currentUser ?: return@withContext emptyList()
@@ -115,24 +91,6 @@ class FirebaseProductRepository @Inject constructor() : ProductRepository {
                 .document(product.id).set(productMap).await()
         }
     }
-
-    override suspend fun analyzeImages(items: List<ScannedItem>): List<ExpirationInfo> =
-        withContext(Dispatchers.IO) {
-            val prompt = ANALYZE_PROMPT
-
-            val response = generativeModel.generateContent(
-                content {
-                    items.forEach { item ->
-                        item.productBitmap?.let { image(it) }
-                        item.dateBitmap?.let { image(it) }
-                    }
-                    text(prompt)
-                }
-            )
-
-            val outputContent = response.text ?: throw Exception("Empty response from AI")
-            json.decodeFromString<List<ExpirationInfo>>(outputContent)
-        }
 
     override suspend fun saveAnalysisResults(results: List<ExpirationInfo>, items: List<ScannedItem>) {
         withContext(Dispatchers.IO) {
