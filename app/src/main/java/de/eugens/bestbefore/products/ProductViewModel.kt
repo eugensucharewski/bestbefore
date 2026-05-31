@@ -89,7 +89,6 @@ class ProductViewModel @Inject constructor(
     private val addProductUseCase: AddProductUseCase,
     private val updateProductUseCase: UpdateProductUseCase,
     private val deleteProductUseCase: DeleteProductUseCase,
-    private val clearAllProductsUseCase: ClearAllProductsUseCase,
     private val analyzeImagesUseCase: AnalyzeImagesUseCase,
     private val saveAnalysisResultsUseCase: SaveAnalysisResultsUseCase,
     private val processImageUseCase: ProcessImageUseCase,
