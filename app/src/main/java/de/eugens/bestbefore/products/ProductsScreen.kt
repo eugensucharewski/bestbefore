@@ -5,6 +5,7 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.graphics.BitmapFactory
 import android.os.Build
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
@@ -13,6 +14,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.app.NotificationCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation3.runtime.NavEntry
+import androidx.navigation3.ui.NavDisplay
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
@@ -107,46 +110,64 @@ fun ProductsScreen(
     ) {
         when (state.authState) {
             is AuthState.Authenticated -> {
-                when (val uiState = state.uiState) {
-                    is UiState.MainList -> MainScreen(
-                        products = state.products,
-                        currentFilter = state.currentFilter,
-                        onFilterChange = { productViewModel.onAction(ProductIntent.SetFilter(it)) },
-                        onProductClick = { productViewModel.onAction(ProductIntent.SelectProductForEdit(it)) },
-                        onAddClick = { productViewModel.onAction(ProductIntent.StartScanning) },
-                        onDeleteProduct = { productViewModel.onAction(ProductIntent.DeleteProduct(it.id)) },
-                        onUndoDelete = { productViewModel.onAction(ProductIntent.AddProduct(it)) },
-                        onClearAll = { productViewModel.onAction(ProductIntent.ClearAllProducts) },
-                        onSettingsClick = { productViewModel.onAction(ProductIntent.OpenSettings) }
-                    )
-                    is UiState.Scanning -> ScanningScreen(
-                        state = uiState,
-                        imageCapture = productViewModel.imageCapture,
-                        onCaptureClick = { productViewModel.onAction(ProductIntent.RequestCapture(context)) },
-                        onCancel = { productViewModel.onAction(ProductIntent.CancelScanning) },
-                        onFinish = { productViewModel.onAction(ProductIntent.FinishScanning) }
-                    )
-                    is UiState.Processing -> ProcessingScreen()
-                    is UiState.Settings -> SettingsScreen(
-                        onBack = { productViewModel.onAction(ProductIntent.BackToMain) },
-                        onSignOut = {
-                            authViewModel.onAction(AuthIntent.SignOut)
-                            productViewModel.onAction(ProductIntent.BackToMain)
-                        },
-                        viewModel = settingsViewModel
-                    )
-                    is UiState.EditProduct -> {
-                        LaunchedEffect(uiState.product) {
-                            editProductViewModel.setProduct(uiState.product, uiState.productBitmap)
+                NavDisplay(
+                    backStack = state.backStack,
+                    onBack = { productViewModel.onAction(ProductIntent.CancelScanning) }
+                ) { uiState ->
+                    NavEntry(uiState) {
+                        when (uiState) {
+                            is UiState.MainList -> MainScreen(
+                                products = state.products,
+                                currentFilter = state.currentFilter,
+                                onFilterChange = { productViewModel.onAction(ProductIntent.SetFilter(it)) },
+                                onProductClick = { productViewModel.onAction(ProductIntent.SelectProductForEdit(it)) },
+                                onAddClick = { productViewModel.onAction(ProductIntent.StartScanning) },
+                                onDeleteProduct = { productViewModel.onAction(ProductIntent.DeleteProduct(it.id)) },
+                                onUndoDelete = { productViewModel.onAction(ProductIntent.AddProduct(it)) },
+                                onClearAll = { productViewModel.onAction(ProductIntent.ClearAllProducts) },
+                                onSettingsClick = { productViewModel.onAction(ProductIntent.OpenSettings) }
+                            )
+
+                            is UiState.Scanning -> ScanningScreen(
+                                state = uiState,
+                                imageCapture = productViewModel.imageCapture,
+                                onCaptureClick = { productViewModel.onAction(ProductIntent.RequestCapture(context)) },
+                                onCancel = { productViewModel.onAction(ProductIntent.CancelScanning) },
+                                onFinish = { productViewModel.onAction(ProductIntent.FinishScanning) }
+                            )
+
+                            is UiState.Processing -> ProcessingScreen()
+                            is UiState.Settings -> SettingsScreen(
+                                onBack = { productViewModel.onAction(ProductIntent.CancelScanning) },
+                                onSignOut = {
+                                    authViewModel.onAction(AuthIntent.SignOut)
+                                    productViewModel.onAction(ProductIntent.BackToMain)
+                                },
+                                viewModel = settingsViewModel
+                            )
+
+                            is UiState.EditProduct -> {
+                                val bitmap = remember(uiState.productBitmap) {
+                                    uiState.productBitmap?.let {
+                                        BitmapFactory.decodeByteArray(it, 0, it.size)
+                                    }
+                                }
+                                LaunchedEffect(uiState.product, bitmap) {
+                                    editProductViewModel.setProduct(uiState.product, bitmap)
+                                }
+                                EditProductScreen(
+                                    viewModel = editProductViewModel,
+                                    onBack = { productViewModel.onAction(ProductIntent.CancelScanning) }
+                                )
+                            }
+
+                            is UiState.Error -> ErrorScreen(uiState.errorMessage) {
+                                productViewModel.onAction(ProductIntent.CancelScanning)
+                            }
+
+                            else -> {}
                         }
-                        EditProductScreen(
-                            viewModel = editProductViewModel,
-                            onBack = { productViewModel.onAction(ProductIntent.BackToMain) }
-                        )
                     }
-                    is UiState.Error -> ErrorScreen(uiState.errorMessage) { productViewModel.onAction(
-                        ProductIntent.CancelScanning) }
-                    else -> {}
                 }
             }
             else -> AuthScreen(authViewModel)

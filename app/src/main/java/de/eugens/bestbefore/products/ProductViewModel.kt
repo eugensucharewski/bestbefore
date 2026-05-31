@@ -31,6 +31,7 @@ import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.launch
+import java.io.ByteArrayOutputStream
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
@@ -71,7 +72,8 @@ data class ProductScreenState(
     val uiState: UiState = UiState.MainList,
     val products: List<ProductUiModel> = emptyList(),
     val currentFilter: ProductFilter = ProductFilter.ALL,
-    val authState: AuthState = AuthState.Unauthenticated
+    val authState: AuthState = AuthState.Unauthenticated,
+    val backStack: List<UiState> = listOf(UiState.MainList)
 )
 
 @HiltViewModel
@@ -98,7 +100,7 @@ class ProductViewModel @Inject constructor(
         private const val TAG = "ProductViewModel"
     }
 
-    private val _uiState: MutableStateFlow<UiState> = MutableStateFlow(UiState.MainList)
+    private val _backStack: MutableStateFlow<List<UiState>> = MutableStateFlow(listOf(UiState.MainList))
     private val _products = MutableStateFlow<List<Product>>(emptyList())
     private val _currentFilter = MutableStateFlow(ProductFilter.ALL)
 
@@ -106,23 +108,24 @@ class ProductViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.Eagerly, Constants.UPCOMING_EXPIRATION_DAYS_THRESHOLD)
 
     val state: StateFlow<ProductScreenState> = combine(
-        _uiState,
+        _backStack,
         _products,
         _currentFilter,
         threshold,
         authRepository.observeAuthState().onStart {
             emit(authRepository.currentUserEmail?.let { AuthState.Authenticated(it) } ?: AuthState.Unauthenticated)
         }
-    ) { uiState, products, filter, thresholdValue, authState ->
+    ) { backStack, products, filter, thresholdValue, authState ->
         val filtered = applyFilter(products, filter, thresholdValue)
         val uiModels = sort(filtered).map { product ->
             ProductUiModel(product, getExpirationStatus(product, thresholdValue))
         }
         ProductScreenState(
-            uiState = uiState,
+            uiState = backStack.lastOrNull() ?: UiState.MainList,
             products = uiModels,
             currentFilter = filter,
-            authState = authState
+            authState = authState,
+            backStack = backStack
         )
     }.stateIn(
         scope = viewModelScope,
@@ -205,21 +208,24 @@ class ProductViewModel @Inject constructor(
     }
 
     private fun selectProductForEdit(product: Product) {
-        _uiState.value = UiState.EditProduct(product)
+        val editState = UiState.EditProduct(product)
+        _backStack.value = _backStack.value + editState
         viewModelScope.launch {
-            val bitmap = withContext(Dispatchers.IO) {
+            val bitmapBytes = withContext(Dispatchers.IO) {
                 product.productImage?.let {
                     try {
-                        val decodedString = Base64.decode(it, Base64.DEFAULT)
-                        BitmapFactory.decodeByteArray(decodedString, 0, decodedString.size)
+                        Base64.decode(it, Base64.DEFAULT)
                     } catch (e: Exception) {
                         null
                     }
                 }
             }
-            val currentState = _uiState.value
-            if (currentState is UiState.EditProduct && currentState.product.id == product.id) {
-                _uiState.value = currentState.copy(productBitmap = bitmap)
+            _backStack.value = _backStack.value.map { state ->
+                if (state is UiState.EditProduct && state.product.id == product.id) {
+                    state.copy(productBitmap = bitmapBytes)
+                } else {
+                    state
+                }
             }
         }
     }
@@ -237,24 +243,28 @@ class ProductViewModel @Inject constructor(
             throw e
         } catch (e: Exception) {
             Log.e(TAG, "refreshProducts failed", e)
-            _uiState.value = UiState.Error(e.localizedMessage ?: "Failed to load products")
+            _backStack.value = _backStack.value + UiState.Error(e.localizedMessage ?: "Failed to load products")
         }
     }
 
     private fun startScanning() {
-        _uiState.value = UiState.Scanning(step = ScanStep.PRODUCT_PHOTO)
+        _backStack.value = _backStack.value + UiState.Scanning(step = ScanStep.PRODUCT_PHOTO)
     }
 
     private fun cancelScanning() {
-        _uiState.value = UiState.MainList
+        if (_backStack.value.size > 1) {
+            _backStack.value = _backStack.value.dropLast(1)
+        } else {
+            _backStack.value = listOf(UiState.MainList)
+        }
     }
 
     private fun openSettings() {
-        _uiState.value = UiState.Settings
+        _backStack.value = _backStack.value + UiState.Settings
     }
 
     private fun backToMain() {
-        _uiState.value = UiState.MainList
+        _backStack.value = listOf(UiState.MainList)
     }
 
     private fun requestCapture(context: Context) {
@@ -274,7 +284,7 @@ class ProductViewModel @Inject constructor(
     }
 
     private fun processCapturedImage(image: ImageProxy) {
-        val currentState = _uiState.value
+        val currentState = _backStack.value.lastOrNull()
         if (currentState is UiState.Scanning) {
             viewModelScope.launch {
                 try {
@@ -291,31 +301,37 @@ class ProductViewModel @Inject constructor(
     }
 
     private fun capturePhoto(bitmap: Bitmap) {
-        val currentState = _uiState.value
+        val backStack = _backStack.value
+        val currentState = backStack.lastOrNull()
         if (currentState is UiState.Scanning) {
-            if (currentState.step == ScanStep.PRODUCT_PHOTO) {
-                _uiState.value = currentState.copy(
+            val stream = ByteArrayOutputStream()
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 90, stream)
+            val byteArray = stream.toByteArray()
+
+            val updatedState = if (currentState.step == ScanStep.PRODUCT_PHOTO) {
+                currentState.copy(
                     step = ScanStep.DATE_PHOTO,
-                    currentItem = currentState.currentItem.copy(productBitmap = bitmap)
+                    currentItem = currentState.currentItem.copy(productBitmap = byteArray)
                 )
             } else {
-                val updatedItem = currentState.currentItem.copy(dateBitmap = bitmap)
+                val updatedItem = currentState.currentItem.copy(dateBitmap = byteArray)
                 val newList = currentState.scannedItems + updatedItem
-                _uiState.value = currentState.copy(
+                currentState.copy(
                     step = ScanStep.PRODUCT_PHOTO,
                     currentItem = ScannedItem(),
                     scannedItems = newList
                 )
             }
+            _backStack.value = backStack.dropLast(1) + updatedState
         }
     }
 
     private fun finishScanning() {
-        val currentState = _uiState.value
+        val currentState = _backStack.value.lastOrNull()
         if (currentState is UiState.Scanning) {
             val itemsToProcess = currentState.scannedItems
             if (itemsToProcess.isEmpty()) {
-                _uiState.value = UiState.MainList
+                _backStack.value = _backStack.value.dropLast(1)
                 return
             }
             processItems(itemsToProcess)
@@ -323,7 +339,8 @@ class ProductViewModel @Inject constructor(
     }
 
     private fun processItems(items: List<ScannedItem>) {
-        _uiState.value = UiState.Processing
+        val backStack = _backStack.value
+        _backStack.value = backStack + UiState.Processing
 
         viewModelScope.launch {
             try {
@@ -331,13 +348,13 @@ class ProductViewModel @Inject constructor(
                 saveAnalysisResultsUseCase(results, items)
 
                 refreshProducts()
-                _uiState.value = UiState.MainList
+                _backStack.value = listOf(UiState.MainList)
                 _events.emit(ProductEvent.NotifyCompletion)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 Log.e(TAG, "processItems failed", e)
-                _uiState.value = UiState.Error(e.localizedMessage ?: "Analysis failed")
+                _backStack.value = _backStack.value + UiState.Error(e.localizedMessage ?: "Analysis failed")
             }
         }
     }
@@ -386,7 +403,7 @@ class ProductViewModel @Inject constructor(
             try {
                 updateProductUseCase(product)
                 refreshProducts()
-                _uiState.value = UiState.MainList
+                _backStack.value = listOf(UiState.MainList)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {

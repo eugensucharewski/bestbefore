@@ -1,6 +1,7 @@
 package de.eugens.bestbefore.products.data
 
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.util.Base64
 import androidx.core.graphics.scale
 import com.google.firebase.Firebase
@@ -96,8 +97,11 @@ class FirebaseProductRepository @Inject constructor() : ProductRepository {
         withContext(Dispatchers.IO) {
             val currentUser = auth.currentUser
             results.forEachIndexed { index, info ->
-                val productBitmap = items.getOrNull(index)?.productBitmap
-                val encodedImage = productBitmap?.let { resizeAndEncodeBitmap(it) }
+                val productByteArray = items.getOrNull(index)?.productBitmap
+                val encodedImage = productByteArray?.let { 
+                    val bitmap = BitmapFactory.decodeByteArray(it, 0, it.size)
+                    resizeAndEncodeBitmap(bitmap) 
+                }
 
                 val productMap = hashMapOf(
                     NAME to info.productName,

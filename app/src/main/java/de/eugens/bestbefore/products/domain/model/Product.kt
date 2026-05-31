@@ -15,7 +15,8 @@ data class Product(
     val userId: String? = null
 )
 
+@Serializable
 data class ScannedItem(
-    val productBitmap: Bitmap? = null,
-    val dateBitmap: Bitmap? = null
+    val productBitmap: ByteArray? = null,
+    val dateBitmap: ByteArray? = null
 )

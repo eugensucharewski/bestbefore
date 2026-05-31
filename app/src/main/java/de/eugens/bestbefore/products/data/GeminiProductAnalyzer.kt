@@ -3,6 +3,7 @@ package de.eugens.bestbefore.products.data
 import com.google.ai.client.generativeai.GenerativeModel
 import com.google.ai.client.generativeai.type.content
 import com.google.ai.client.generativeai.type.generationConfig
+import android.graphics.BitmapFactory
 import de.eugens.bestbefore.BuildConfig
 import de.eugens.bestbefore.products.domain.analyzer.AIProductAnalyzer
 import de.eugens.bestbefore.products.domain.model.ExpirationInfo
@@ -43,8 +44,14 @@ class GeminiProductAnalyzer @Inject constructor() : AIProductAnalyzer {
             val response = generativeModel.generateContent(
                 content {
                     items.forEach { item ->
-                        item.productBitmap?.let { image(it) }
-                        item.dateBitmap?.let { image(it) }
+                        item.productBitmap?.let { 
+                            val bitmap = BitmapFactory.decodeByteArray(it, 0, it.size)
+                            image(bitmap) 
+                        }
+                        item.dateBitmap?.let { 
+                            val bitmap = BitmapFactory.decodeByteArray(it, 0, it.size)
+                            image(bitmap) 
+                        }
                     }
                     text(ANALYZE_PROMPT)
                 }

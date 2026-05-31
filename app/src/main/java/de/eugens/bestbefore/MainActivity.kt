@@ -8,6 +8,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.lifecycleScope
 import dagger.hilt.android.AndroidEntryPoint
@@ -18,6 +19,8 @@ import de.eugens.bestbefore.products.ProductViewModel
 import de.eugens.bestbefore.products.ProductsScreen
 import de.eugens.bestbefore.ui.theme.BestBeforeTheme
 import de.eugens.bestbefore.worker.ExpirationWorkScheduler
+import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
+import androidx.navigationevent.compose.rememberNavigationEventDispatcherOwner
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -44,11 +47,14 @@ class MainActivity : AppCompatActivity() {
 
         setContent {
             BestBeforeTheme {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background,
-                ) {
-                    ProductsScreen(productViewModel = productViewModel)
+                val dispatcherOwner = rememberNavigationEventDispatcherOwner(parent = this)
+                CompositionLocalProvider(LocalNavigationEventDispatcherOwner provides dispatcherOwner) {
+                    Surface(
+                        modifier = Modifier.fillMaxSize(),
+                        color = MaterialTheme.colorScheme.background,
+                    ) {
+                        ProductsScreen(productViewModel = productViewModel)
+                    }
                 }
             }
         }
