@@ -22,7 +22,6 @@ import de.eugens.bestbefore.auth.AuthIntent
 import de.eugens.bestbefore.auth.AuthState
 import de.eugens.bestbefore.auth.AuthViewModel
 import de.eugens.bestbefore.auth.AuthScreen
-import de.eugens.bestbefore.products.domain.model.Product
 import de.eugens.bestbefore.products.edit.EditProductScreen
 import de.eugens.bestbefore.products.edit.EditProductViewModel
 import de.eugens.bestbefore.settings.SettingsScreen
@@ -37,10 +36,7 @@ fun ProductsScreen(
     settingsViewModel: SettingsViewModel = viewModel(),
     editProductViewModel: EditProductViewModel = viewModel()
 ) {
-    val uiState by productViewModel.uiState.collectAsState()
-    val products by productViewModel.products.collectAsState()
-    val authState by authViewModel.authState.collectAsState()
-    val currentFilter by productViewModel.currentFilter.collectAsState()
+    val state by productViewModel.state.collectAsState()
 
     val context = LocalContext.current
 
@@ -90,8 +86,8 @@ fun ProductsScreen(
         null
     }
 
-    LaunchedEffect(authState) {
-        if (authState is AuthState.Authenticated) {
+    LaunchedEffect(state.authState) {
+        if (state.authState is AuthState.Authenticated) {
             productViewModel.onAction(ProductIntent.LoadProducts)
         }
     }
@@ -109,12 +105,12 @@ fun ProductsScreen(
         modifier = Modifier.fillMaxSize(),
         color = MaterialTheme.colorScheme.background
     ) {
-        when (authState) {
+        when (state.authState) {
             is AuthState.Authenticated -> {
-                when (val state = uiState) {
+                when (val uiState = state.uiState) {
                     is UiState.MainList -> MainScreen(
-                        products = products,
-                        currentFilter = currentFilter,
+                        products = state.products,
+                        currentFilter = state.currentFilter,
                         onFilterChange = { productViewModel.onAction(ProductIntent.SetFilter(it)) },
                         onProductClick = { productViewModel.onAction(ProductIntent.SelectProductForEdit(it)) },
                         onAddClick = { productViewModel.onAction(ProductIntent.StartScanning) },
@@ -124,7 +120,7 @@ fun ProductsScreen(
                         onSettingsClick = { productViewModel.onAction(ProductIntent.OpenSettings) }
                     )
                     is UiState.Scanning -> ScanningScreen(
-                        state = state,
+                        state = uiState,
                         imageCapture = productViewModel.imageCapture,
                         onCaptureClick = { productViewModel.onAction(ProductIntent.RequestCapture(context)) },
                         onCancel = { productViewModel.onAction(ProductIntent.CancelScanning) },
@@ -140,15 +136,15 @@ fun ProductsScreen(
                         viewModel = settingsViewModel
                     )
                     is UiState.EditProduct -> {
-                        LaunchedEffect(state.product) {
-                            editProductViewModel.setProduct(state.product, state.productBitmap)
+                        LaunchedEffect(uiState.product) {
+                            editProductViewModel.setProduct(uiState.product, uiState.productBitmap)
                         }
                         EditProductScreen(
                             viewModel = editProductViewModel,
                             onBack = { productViewModel.onAction(ProductIntent.BackToMain) }
                         )
                     }
-                    is UiState.Error -> ErrorScreen(state.errorMessage) { productViewModel.onAction(
+                    is UiState.Error -> ErrorScreen(uiState.errorMessage) { productViewModel.onAction(
                         ProductIntent.CancelScanning) }
                     else -> {}
                 }

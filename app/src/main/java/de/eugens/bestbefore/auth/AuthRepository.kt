@@ -7,7 +7,11 @@ import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 
-class AuthRepository {
+import javax.inject.Inject
+import javax.inject.Singleton
+
+@Singleton
+class AuthRepository @Inject constructor() {
     private val auth: FirebaseAuth = Firebase.auth
 
     val currentUserEmail: String?

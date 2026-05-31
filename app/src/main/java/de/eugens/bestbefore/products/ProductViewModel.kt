@@ -13,6 +13,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import de.eugens.bestbefore.Constants
+import de.eugens.bestbefore.auth.AuthRepository
+import de.eugens.bestbefore.auth.AuthState
 import de.eugens.bestbefore.products.domain.model.Product
 import de.eugens.bestbefore.products.domain.model.ScannedItem
 import de.eugens.bestbefore.settings.domain.repository.SettingsRepository
@@ -23,9 +25,9 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.launch
@@ -65,6 +67,13 @@ data class ProductUiModel(
     val status: ExpirationStatus
 )
 
+data class ProductScreenState(
+    val uiState: UiState = UiState.MainList,
+    val products: List<ProductUiModel> = emptyList(),
+    val currentFilter: ProductFilter = ProductFilter.ALL,
+    val authState: AuthState = AuthState.Unauthenticated
+)
+
 @HiltViewModel
 class ProductViewModel @Inject constructor(
     private val getProductsUseCase: GetProductsUseCase,
@@ -75,7 +84,8 @@ class ProductViewModel @Inject constructor(
     private val analyzeImagesUseCase: AnalyzeImagesUseCase,
     private val saveAnalysisResultsUseCase: SaveAnalysisResultsUseCase,
     private val processImageUseCase: ProcessImageUseCase,
-    settingsRepository: SettingsRepository
+    settingsRepository: SettingsRepository,
+    private val authRepository: AuthRepository
 ) : ViewModel() {
 
     val imageCapture = ImageCapture.Builder()
@@ -89,38 +99,42 @@ class ProductViewModel @Inject constructor(
     }
 
     private val _uiState: MutableStateFlow<UiState> = MutableStateFlow(UiState.MainList)
-    val uiState: StateFlow<UiState> = _uiState.asStateFlow()
+    private val _products = MutableStateFlow<List<Product>>(emptyList())
+    private val _currentFilter = MutableStateFlow(ProductFilter.ALL)
+
+    private val threshold = settingsRepository.getExpirationThresholdFlow()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, Constants.UPCOMING_EXPIRATION_DAYS_THRESHOLD)
+
+    val state: StateFlow<ProductScreenState> = combine(
+        _uiState,
+        _products,
+        _currentFilter,
+        threshold,
+        authRepository.observeAuthState().onStart {
+            emit(authRepository.currentUserEmail?.let { AuthState.Authenticated(it) } ?: AuthState.Unauthenticated)
+        }
+    ) { uiState, products, filter, thresholdValue, authState ->
+        val filtered = applyFilter(products, filter, thresholdValue)
+        val uiModels = sort(filtered).map { product ->
+            ProductUiModel(product, getExpirationStatus(product, thresholdValue))
+        }
+        ProductScreenState(
+            uiState = uiState,
+            products = uiModels,
+            currentFilter = filter,
+            authState = authState
+        )
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = ProductScreenState()
+    )
 
     private val _events = MutableSharedFlow<ProductEvent>()
     val events = _events.asSharedFlow()
 
-    private val _products = MutableStateFlow<List<Product>>(emptyList())
-    
-    private val _currentFilter = MutableStateFlow(ProductFilter.ALL)
-    val currentFilter: StateFlow<ProductFilter> = _currentFilter.asStateFlow()
-
-    private val _filteredProducts = MutableStateFlow<List<ProductUiModel>>(emptyList())
-    val products: StateFlow<List<ProductUiModel>> = _filteredProducts.asStateFlow()
-
-    val threshold = settingsRepository.getExpirationThresholdFlow()
-        .stateIn(viewModelScope, SharingStarted.Eagerly, Constants.UPCOMING_EXPIRATION_DAYS_THRESHOLD)
-
     init {
         loadProducts()
-        observeProductsAndFilter()
-    }
-
-    private fun observeProductsAndFilter() {
-        viewModelScope.launch {
-            combine(_products, _currentFilter, threshold) { products, filter, thresholdValue ->
-                val filtered = applyFilter(products, filter, thresholdValue)
-                sort(filtered).map { product ->
-                    ProductUiModel(product, getExpirationStatus(product, thresholdValue))
-                }
-            }.collect { uiModels ->
-                _filteredProducts.value = uiModels
-            }
-        }
     }
 
     private fun getExpirationStatus(product: Product, thresholdValue: Int): ExpirationStatus {
