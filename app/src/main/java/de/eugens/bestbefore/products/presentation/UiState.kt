@@ -1,4 +1,4 @@
-package de.eugens.bestbefore.products
+package de.eugens.bestbefore.products.presentation
 
 import de.eugens.bestbefore.products.domain.model.Product
 import de.eugens.bestbefore.products.domain.model.ScannedItem

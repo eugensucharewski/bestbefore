@@ -1,4 +1,4 @@
-package de.eugens.bestbefore.products.domain.usecase
+package de.eugens.bestbefore.products.domain.use_case
 
 import de.eugens.bestbefore.products.domain.model.ExpirationInfo
 import de.eugens.bestbefore.products.domain.model.ScannedItem

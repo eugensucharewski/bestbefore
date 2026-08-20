@@ -4,6 +4,8 @@ import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
+import de.eugens.bestbefore.auth.data.repository.FirebaseAuthRepository
+import de.eugens.bestbefore.auth.domain.repository.AuthRepository
 import de.eugens.bestbefore.products.data.repository.CameraXRepository
 import de.eugens.bestbefore.products.data.repository.FirebaseProductRepository
 import de.eugens.bestbefore.products.data.analyzer.GeminiProductAnalyzer
@@ -17,6 +19,12 @@ import javax.inject.Singleton
 @Module
 @InstallIn(SingletonComponent::class)
 abstract class RepositoryModule {
+
+    @Binds
+    @Singleton
+    abstract fun bindAuthRepository(
+        authRepositoryImpl: FirebaseAuthRepository
+    ): AuthRepository
 
     @Binds
     @Singleton

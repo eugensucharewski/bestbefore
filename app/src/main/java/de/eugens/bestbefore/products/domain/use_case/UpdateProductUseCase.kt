@@ -1,11 +1,11 @@
-package de.eugens.bestbefore.products.domain.usecase
+package de.eugens.bestbefore.products.domain.use_case
 
 import de.eugens.bestbefore.products.domain.model.Product
 import de.eugens.bestbefore.products.domain.repository.ProductRepository
 import javax.inject.Inject
 
-class GetProductsUseCase @Inject constructor(
+class UpdateProductUseCase @Inject constructor(
     private val repository: ProductRepository
 ) {
-    suspend operator fun invoke(): List<Product> = repository.getProducts()
+    suspend operator fun invoke(product: Product) = repository.updateProduct(product)
 }

@@ -1,4 +1,4 @@
-package de.eugens.bestbefore.products.edit
+package de.eugens.bestbefore.edit_product
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -6,8 +6,8 @@ import android.util.Base64
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
-import de.eugens.bestbefore.products.domain.usecase.UpdateProductUseCase
-import de.eugens.bestbefore.products.domain.usecase.DeleteProductUseCase
+import de.eugens.bestbefore.products.domain.use_case.UpdateProductUseCase
+import de.eugens.bestbefore.products.domain.use_case.DeleteProductUseCase
 import de.eugens.bestbefore.products.domain.model.Product
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow

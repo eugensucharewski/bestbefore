@@ -1,4 +1,4 @@
-package de.eugens.bestbefore.products
+package de.eugens.bestbefore.products.presentation
 
 import kotlinx.serialization.Serializable
 

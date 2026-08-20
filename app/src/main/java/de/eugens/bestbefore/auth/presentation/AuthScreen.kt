@@ -1,4 +1,4 @@
-package de.eugens.bestbefore.auth
+package de.eugens.bestbefore.auth.presentation
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*

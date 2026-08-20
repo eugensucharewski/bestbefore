@@ -1,8 +1,13 @@
-package de.eugens.bestbefore.auth
+package de.eugens.bestbefore.auth.presentation
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import de.eugens.bestbefore.auth.domain.use_case.GetCurrentUserEmailUseCase
+import de.eugens.bestbefore.auth.domain.use_case.ObserveAuthStateUseCase
+import de.eugens.bestbefore.auth.domain.use_case.SignInUseCase
+import de.eugens.bestbefore.auth.domain.use_case.SignOutUseCase
+import de.eugens.bestbefore.auth.domain.use_case.SignUpUseCase
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -29,11 +34,20 @@ sealed class AuthIntent {
 
 @HiltViewModel
 class AuthViewModel @Inject constructor(
-    private val repository: AuthRepository
+    private val signInUseCase: SignInUseCase,
+    private val signUpUseCase: SignUpUseCase,
+    private val signOutUseCase: SignOutUseCase,
+    private val observeAuthStateUseCase: ObserveAuthStateUseCase,
+    getCurrentUserEmailUseCase: GetCurrentUserEmailUseCase
 ) : ViewModel() {
 
-    private val _authState = MutableStateFlow<AuthState>(
-        repository.currentUserEmail?.let { AuthState.Authenticated(it) } ?: AuthState.Unauthenticated
+    companion object {
+        const val UNKNOWN_ERROR = "unknown error"
+    }
+
+    private val _authState = MutableStateFlow(
+        getCurrentUserEmailUseCase()?.let { AuthState.Authenticated(it) }
+            ?: AuthState.Unauthenticated
     )
     val authState: StateFlow<AuthState> = _authState.asStateFlow()
 
@@ -48,7 +62,7 @@ class AuthViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            repository.observeAuthState().collectLatest { state ->
+            observeAuthStateUseCase().collectLatest { state ->
                 _authState.value = state
             }
         }
@@ -68,30 +82,32 @@ class AuthViewModel @Inject constructor(
 
     private fun signIn(email: String, pass: String) {
         _authState.value = AuthState.Loading
-        repository.signIn(email, pass,
-            onSuccess = { emailResult ->
-                _authState.value = AuthState.Authenticated(emailResult)
-            },
-            onFailure = { message ->
-                _authState.value = AuthState.Error(message)
+        viewModelScope.launch {
+            val signInResult = signInUseCase(email, pass)
+            if (signInResult.isFailure) {
+                _authState.value = AuthState.Error(
+                    signInResult.exceptionOrNull()?.localizedMessage ?: UNKNOWN_ERROR
+                )
             }
-        )
+        }
     }
 
     private fun signUp(email: String, pass: String) {
         _authState.value = AuthState.Loading
-        repository.signUp(email, pass,
-            onSuccess = { emailResult ->
-                _authState.value = AuthState.Authenticated(emailResult)
-            },
-            onFailure = { message ->
-                _authState.value = AuthState.Error(message)
+        viewModelScope.launch {
+            val signUpResult = signUpUseCase(email, pass)
+            if (signUpResult.isFailure) {
+                _authState.value = AuthState.Error(
+                    signUpResult.exceptionOrNull()?.localizedMessage ?: UNKNOWN_ERROR
+                )
             }
-        )
+        }
     }
 
     private fun signOut() {
-        repository.signOut()
+        viewModelScope.launch { 
+            signOutUseCase()
+        }
     }
 
     private fun resetError() {

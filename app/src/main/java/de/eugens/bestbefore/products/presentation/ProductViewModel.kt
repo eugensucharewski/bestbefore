@@ -1,4 +1,4 @@
-package de.eugens.bestbefore.products
+package de.eugens.bestbefore.products.presentation
 
 import android.graphics.Bitmap
 import android.util.Base64
@@ -7,13 +7,13 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import de.eugens.bestbefore.Constants
-import de.eugens.bestbefore.auth.AuthRepository
-import de.eugens.bestbefore.auth.AuthState
+import de.eugens.bestbefore.auth.data.repository.FirebaseAuthRepository
+import de.eugens.bestbefore.auth.presentation.AuthState
 import de.eugens.bestbefore.products.domain.model.Product
 import de.eugens.bestbefore.products.domain.model.ScannedItem
 import de.eugens.bestbefore.settings.domain.repository.SettingsRepository
 import de.eugens.bestbefore.products.domain.repository.CameraRepository
-import de.eugens.bestbefore.products.domain.usecase.*
+import de.eugens.bestbefore.products.domain.use_case.*
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -89,7 +89,7 @@ class ProductViewModel @Inject constructor(
     private val processImageUseCase: ProcessImageUseCase,
     private val cameraRepository: CameraRepository,
     settingsRepository: SettingsRepository,
-    private val authRepository: AuthRepository
+    private val authRepository: FirebaseAuthRepository
 ) : ViewModel() {
 
     private val formatter = DateTimeFormatter.ofPattern(Constants.DATE_FORMAT)

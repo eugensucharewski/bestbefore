@@ -1,9 +1,9 @@
-package de.eugens.bestbefore.products.domain.usecase
+package de.eugens.bestbefore.products.domain.use_case
 
 import android.graphics.Bitmap
 import android.graphics.Rect
 import de.eugens.bestbefore.Constants
-import de.eugens.bestbefore.products.ScanStep
+import de.eugens.bestbefore.products.presentation.ScanStep
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import javax.inject.Inject

@@ -13,10 +13,10 @@ import androidx.compose.ui.Modifier
 import androidx.lifecycle.lifecycleScope
 import dagger.hilt.android.AndroidEntryPoint
 import de.eugens.bestbefore.settings.domain.repository.SettingsRepository
-import de.eugens.bestbefore.products.ProductFilter
-import de.eugens.bestbefore.products.ProductIntent
-import de.eugens.bestbefore.products.ProductViewModel
-import de.eugens.bestbefore.products.ProductsScreen
+import de.eugens.bestbefore.products.presentation.ProductFilter
+import de.eugens.bestbefore.products.presentation.ProductIntent
+import de.eugens.bestbefore.products.presentation.ProductViewModel
+import de.eugens.bestbefore.products.presentation.ProductsScreen
 import de.eugens.bestbefore.ui.theme.BestBeforeTheme
 import de.eugens.bestbefore.worker.ExpirationWorkScheduler
 import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner

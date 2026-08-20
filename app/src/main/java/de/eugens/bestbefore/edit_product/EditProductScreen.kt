@@ -1,4 +1,4 @@
-package de.eugens.bestbefore.products.edit
+package de.eugens.bestbefore.edit_product
 
 import android.graphics.Bitmap
 import androidx.compose.foundation.Image

@@ -1,5 +1,6 @@
-package de.eugens.bestbefore.products
+package de.eugens.bestbefore.products.presentation
 
+import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -16,19 +17,19 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.core.app.NotificationCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation3.runtime.NavEntry
-import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.ui.NavDisplay
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
 import de.eugens.bestbefore.Constants
+import de.eugens.bestbefore.MainActivity
 import de.eugens.bestbefore.R
-import de.eugens.bestbefore.auth.AuthIntent
-import de.eugens.bestbefore.auth.AuthState
-import de.eugens.bestbefore.auth.AuthViewModel
-import de.eugens.bestbefore.auth.AuthScreen
-import de.eugens.bestbefore.products.edit.EditProductScreen
-import de.eugens.bestbefore.products.edit.EditProductViewModel
+import de.eugens.bestbefore.auth.presentation.AuthIntent
+import de.eugens.bestbefore.auth.presentation.AuthState
+import de.eugens.bestbefore.auth.presentation.AuthViewModel
+import de.eugens.bestbefore.auth.presentation.AuthScreen
+import de.eugens.bestbefore.edit_product.EditProductScreen
+import de.eugens.bestbefore.edit_product.EditProductViewModel
 import de.eugens.bestbefore.settings.SettingsScreen
 import de.eugens.bestbefore.settings.SettingsViewModel
 import kotlinx.coroutines.flow.collectLatest
@@ -45,7 +46,7 @@ fun ProductsScreen(
 
     val context = LocalContext.current
 
-    val cameraPermissionState = rememberPermissionState(android.Manifest.permission.CAMERA)
+    val cameraPermissionState = rememberPermissionState(Manifest.permission.CAMERA)
 
     LaunchedEffect(Unit) {
         productViewModel.events.collectLatest { event ->
@@ -61,7 +62,7 @@ fun ProductsScreen(
                     )
                     notificationManager.createNotificationChannel(channel)
 
-                    val intent = Intent(context, de.eugens.bestbefore.MainActivity::class.java).apply {
+                    val intent = Intent(context, MainActivity::class.java).apply {
                         flags = Intent.FLAG_ACTIVITY_SINGLE_TOP
                     }
                     val pendingIntent = PendingIntent.getActivity(
@@ -86,7 +87,7 @@ fun ProductsScreen(
     }
 
     val notificationPermissionState = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-        rememberPermissionState(android.Manifest.permission.POST_NOTIFICATIONS)
+        rememberPermissionState(Manifest.permission.POST_NOTIFICATIONS)
     } else {
         null
     }
