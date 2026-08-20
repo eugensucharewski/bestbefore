@@ -20,7 +20,7 @@ class ProcessImageUseCase @Inject constructor() {
             val rotatedBitmap = Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
 
             if (bitmap != rotatedBitmap) {
-                rotatedBitmap.recycle()
+                bitmap.recycle()
             }
 
             val width = rotatedBitmap.width

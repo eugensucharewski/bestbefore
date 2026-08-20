@@ -18,7 +18,7 @@ import javax.inject.Singleton
 class GeminiProductAnalyzer @Inject constructor() : AIProductAnalyzer {
 
     companion object {
-        private const val GEMINI_MODEL_NAME = "gemini-flash-latest"
+        private const val GEMINI_MODEL_NAME = "gemini-3.6-flash"
         private const val SYSTEM_INSTRUCTION = "Ты — специализированный ассистент по распознаванию названий продуктов питания и их сроков годности. " +
                 "Для каждого изображения (фото продукта и фото даты) определи название продукта и срок годности. " +
                 "Верни массив JSON объектов с полями: productName (String), date_found (boolean), expiration_date (DD.MM.YYYY), production_date (YYYY-MM-DD), confidence (high/medium/low), raw_text_detected (string)."
@@ -41,23 +41,34 @@ class GeminiProductAnalyzer @Inject constructor() : AIProductAnalyzer {
 
     override suspend fun analyzeImages(items: List<ScannedItem>): List<ExpirationInfo> =
         withContext(Dispatchers.IO) {
-            val response = generativeModel.generateContent(
-                content {
-                    items.forEach { item ->
-                        item.productBitmap?.let { 
-                            val bitmap = BitmapFactory.decodeByteArray(it, 0, it.size)
-                            image(bitmap) 
+            try {
+                val response = generativeModel.generateContent(
+                    content {
+                        items.forEach { item ->
+                            item.productBitmap?.let { 
+                                val bitmap = BitmapFactory.decodeByteArray(it, 0, it.size)
+                                image(bitmap) 
+                            }
+                            item.dateBitmap?.let { 
+                                val bitmap = BitmapFactory.decodeByteArray(it, 0, it.size)
+                                image(bitmap) 
+                            }
                         }
-                        item.dateBitmap?.let { 
-                            val bitmap = BitmapFactory.decodeByteArray(it, 0, it.size)
-                            image(bitmap) 
-                        }
+                        text(ANALYZE_PROMPT)
                     }
-                    text(ANALYZE_PROMPT)
-                }
-            )
+                )
 
-            val outputContent = response.text ?: throw Exception("Empty response from AI")
-            json.decodeFromString<List<ExpirationInfo>>(outputContent)
+                val outputContent = response.text ?: throw Exception("Empty response from AI")
+                json.decodeFromString<List<ExpirationInfo>>(outputContent)
+            } catch (e: Exception) {
+                val errorStr = e.toString()
+                if (errorStr.contains("503") || errorStr.contains("UNAVAILABLE")) {
+                    throw Exception("AI service is currently busy (503). Please try again later.")
+                }
+                if (errorStr.contains("MissingFieldException") || errorStr.contains("SerializationException")) {
+                    throw Exception("AI error: invalid response format. Please try again.")
+                }
+                throw e
+            }
         }
 }

@@ -57,6 +57,7 @@ sealed class ProductIntent {
     data class ToggleSelection(val productId: String) : ProductIntent()
     data object ClearSelection : ProductIntent()
     data object DeleteSelectedProducts : ProductIntent()
+    data object BackFromError : ProductIntent()
 }
 
 sealed class ProductEvent {
@@ -235,6 +236,7 @@ class ProductViewModel @Inject constructor(
             is ProductIntent.ToggleSelection -> toggleSelection(intent.productId)
             is ProductIntent.ClearSelection -> _selectedProductIds.value = emptySet()
             is ProductIntent.DeleteSelectedProducts -> deleteSelectedProducts()
+            is ProductIntent.BackFromError -> backFromError()
         }
     }
 
@@ -291,7 +293,14 @@ class ProductViewModel @Inject constructor(
 
     private fun loadProducts() {
         viewModelScope.launch {
-            refreshProducts()
+            try {
+                refreshProducts()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e(TAG, "loadProducts failed", e)
+                _backStack.value = _backStack.value + UiState.Error(e.localizedMessage ?: "Failed to load products")
+            }
         }
     }
 
@@ -299,11 +308,6 @@ class ProductViewModel @Inject constructor(
         _isLoading.value = true
         try {
             _products.value = getProductsUseCase()
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            Log.e(TAG, "refreshProducts failed", e)
-            _backStack.value = _backStack.value + UiState.Error(e.localizedMessage ?: "Failed to load products")
         } finally {
             _isLoading.value = false
         }
@@ -407,6 +411,9 @@ class ProductViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val results = analyzeImagesUseCase(items)
+                if (results.isEmpty()) {
+                    throw Exception("AI could not recognize any products. Please try taking clearer photos.")
+                }
                 saveAnalysisResultsUseCase(results, items)
 
                 refreshProducts()
@@ -457,6 +464,18 @@ class ProductViewModel @Inject constructor(
                 throw e
             } catch (e: Exception) {
                 Log.e(TAG, "updateProduct failed", e)
+            }
+        }
+    }
+
+    private fun backFromError() {
+        val currentBackStack = _backStack.value
+        if (currentBackStack.lastOrNull() is UiState.Error) {
+            val stackWithoutError = currentBackStack.dropLast(1)
+            if (stackWithoutError.lastOrNull() is UiState.Processing) {
+                _backStack.value = stackWithoutError.dropLast(1)
+            } else {
+                _backStack.value = stackWithoutError
             }
         }
     }
