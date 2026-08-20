@@ -131,11 +131,15 @@ fun ProductsScreen(
                                 )
                             }
 
-                            is UiState.Scanning -> NavEntry(uiState) {
+                            is UiState.Scanning -> NavEntry(
+                                key = uiState,
+                                contentKey = "scanning"
+                            ) { activeState ->
                                 ScanningScreen(
-                                    state = uiState,
-                                    imageCapture = productViewModel.imageCapture,
-                                    onCaptureClick = { productViewModel.onAction(ProductIntent.RequestCapture(context)) },
+                                    state = activeState as UiState.Scanning,
+                                    cameraController = productViewModel.cameraController,
+                                    onFlashToggle = { enabled -> productViewModel.setFlashEnabled(enabled) },
+                                    onCaptureClick = { productViewModel.onAction(ProductIntent.RequestCapture) },
                                     onCancel = { productViewModel.onAction(ProductIntent.CancelScanning) },
                                     onFinish = { productViewModel.onAction(ProductIntent.FinishScanning) }
                                 )

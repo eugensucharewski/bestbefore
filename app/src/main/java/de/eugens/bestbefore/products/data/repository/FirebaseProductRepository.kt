@@ -1,4 +1,4 @@
-package de.eugens.bestbefore.products.data
+package de.eugens.bestbefore.products.data.repository
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory

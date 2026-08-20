@@ -1,10 +1,6 @@
 package de.eugens.bestbefore.products
 
-import android.util.Log
-import androidx.camera.core.Camera
-import androidx.camera.core.CameraSelector
-import androidx.camera.core.ImageCapture
-import androidx.camera.lifecycle.ProcessCameraProvider
+import androidx.camera.view.LifecycleCameraController
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -24,57 +20,43 @@ import androidx.compose.ui.graphics.ClipOp
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.clipPath
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import de.eugens.bestbefore.Constants
 import de.eugens.bestbefore.R
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.launch
-import androidx.camera.core.Preview as CameraPreview
 
 @Composable
 fun ScanningScreen(
     state: UiState.Scanning,
-    imageCapture: ImageCapture,
+    cameraController: Any,
+    onFlashToggle: (Boolean) -> Unit,
     onCaptureClick: () -> Unit,
     onCancel: () -> Unit,
     onFinish: () -> Unit
 ) {
-    val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
-    val previewView = remember { PreviewView(context) }
+    val controller = remember { cameraController as LifecycleCameraController }
     var isFlashOn by remember { mutableStateOf(false) }
-    var camera by remember { mutableStateOf<Camera?>(null) }
 
-    LaunchedEffect(Unit) {
-        val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
-        cameraProviderFuture.addListener({
-            val cameraProvider = cameraProviderFuture.get()
-            val preview = CameraPreview.Builder().build().also {
-                it.surfaceProvider = previewView.surfaceProvider
-            }
-            try {
-                cameraProvider.unbindAll()
-                camera = cameraProvider.bindToLifecycle(
-                    lifecycleOwner,
-                    CameraSelector.DEFAULT_BACK_CAMERA,
-                    preview,
-                    imageCapture
-                )
-            } catch (e: Exception) {
-                Log.e("CameraX", "Use case binding failed", e)
-            }
-        }, ContextCompat.getMainExecutor(context))
+    DisposableEffect(lifecycleOwner) {
+        controller.bindToLifecycle(lifecycleOwner)
+        onDispose {
+            controller.unbind()
+        }
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        AndroidView(factory = { previewView }, modifier = Modifier.fillMaxSize())
+        AndroidView(
+            factory = { context ->
+                PreviewView(context).apply {
+                    this.controller = controller
+                }
+            },
+            modifier = Modifier.fillMaxSize()
+        )
 
         ScanningOverlay(state.step)
 
@@ -98,7 +80,7 @@ fun ScanningScreen(
         IconButton(
             onClick = {
                 isFlashOn = !isFlashOn
-                camera?.cameraControl?.enableTorch(isFlashOn)
+                onFlashToggle(isFlashOn)
             },
             modifier = Modifier.align(Alignment.TopEnd).padding(16.dp)
         ) {

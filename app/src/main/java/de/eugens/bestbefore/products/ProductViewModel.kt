@@ -1,14 +1,8 @@
 package de.eugens.bestbefore.products
 
-import android.content.Context
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.util.Base64
 import android.util.Log
-import androidx.camera.core.ImageCapture
-import androidx.camera.core.ImageCaptureException
-import androidx.camera.core.ImageProxy
-import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -18,6 +12,7 @@ import de.eugens.bestbefore.auth.AuthState
 import de.eugens.bestbefore.products.domain.model.Product
 import de.eugens.bestbefore.products.domain.model.ScannedItem
 import de.eugens.bestbefore.settings.domain.repository.SettingsRepository
+import de.eugens.bestbefore.products.domain.repository.CameraRepository
 import de.eugens.bestbefore.products.domain.usecase.*
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -43,8 +38,7 @@ sealed class ProductIntent {
     data object CancelScanning : ProductIntent()
     data object OpenSettings : ProductIntent()
     data object BackToMain : ProductIntent()
-    data class RequestCapture(val context: Context) : ProductIntent()
-    data class ProcessCapturedImage(val image: ImageProxy) : ProductIntent()
+    data object RequestCapture : ProductIntent()
     data class CapturePhoto(val bitmap: Bitmap) : ProductIntent()
     data object FinishScanning : ProductIntent()
     data class DeleteProduct(val product: Product) : ProductIntent()
@@ -93,15 +87,18 @@ class ProductViewModel @Inject constructor(
     private val analyzeImagesUseCase: AnalyzeImagesUseCase,
     private val saveAnalysisResultsUseCase: SaveAnalysisResultsUseCase,
     private val processImageUseCase: ProcessImageUseCase,
+    private val cameraRepository: CameraRepository,
     settingsRepository: SettingsRepository,
     private val authRepository: AuthRepository
 ) : ViewModel() {
 
-    val imageCapture = ImageCapture.Builder()
-        .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
-        .build()
-
     private val formatter = DateTimeFormatter.ofPattern(Constants.DATE_FORMAT)
+
+    val cameraController = cameraRepository.getController()
+
+    fun setFlashEnabled(enabled: Boolean) {
+        cameraRepository.setFlashEnabled(enabled)
+    }
 
     companion object {
         private const val TAG = "ProductViewModel"
@@ -219,9 +216,8 @@ class ProductViewModel @Inject constructor(
             is ProductIntent.CancelScanning -> cancelScanning()
             is ProductIntent.OpenSettings -> openSettings()
             is ProductIntent.BackToMain -> backToMain()
-            is ProductIntent.RequestCapture -> requestCapture(intent.context)
-            is ProductIntent.ProcessCapturedImage -> processCapturedImage(intent.image)
-            is ProductIntent.CapturePhoto -> capturePhoto(intent.bitmap)
+            is ProductIntent.RequestCapture -> requestCapture()
+            is ProductIntent.CapturePhoto -> viewModelScope.launch { capturePhoto(intent.bitmap) }
             is ProductIntent.FinishScanning -> finishScanning()
             is ProductIntent.DeleteProduct -> _productToDelete.value = intent.product
             is ProductIntent.ConfirmDelete -> {
@@ -333,40 +329,24 @@ class ProductViewModel @Inject constructor(
         _backStack.value = listOf(UiState.MainList)
     }
 
-    private fun requestCapture(context: Context) {
-        val mainExecutor = ContextCompat.getMainExecutor(context)
-        imageCapture.takePicture(
-            mainExecutor,
-            object : ImageCapture.OnImageCapturedCallback() {
-                override fun onCaptureSuccess(image: ImageProxy) {
-                    processCapturedImage(image)
-                }
-
-                override fun onError(exception: ImageCaptureException) {
-                    Log.e(TAG, "Photo capture failed: ${exception.message}", exception)
-                }
-            }
-        )
-    }
-
-    private fun processCapturedImage(image: ImageProxy) {
+    private fun requestCapture() {
         val currentState = _backStack.value.lastOrNull()
         if (currentState is UiState.Scanning) {
             viewModelScope.launch {
                 try {
-                    val bitmap = processImageUseCase(image, currentState.step)
-                    capturePhoto(bitmap)
+                    val bitmap = cameraRepository.takePicture()
+                    if (bitmap != null) {
+                        val processedBitmap = processImageUseCase(bitmap, currentState.step)
+                        capturePhoto(processedBitmap)
+                    }
                 } catch (e: Exception) {
-                    Log.e(TAG, "processCapturedImage failed", e)
-                    image.close()
+                    Log.e(TAG, "Photo capture failed", e)
                 }
             }
-        } else {
-            image.close()
         }
     }
 
-    private fun capturePhoto(bitmap: Bitmap) {
+    private suspend fun capturePhoto(bitmap: Bitmap) = withContext(Dispatchers.Default) {
         val backStack = _backStack.value
         val currentState = backStack.lastOrNull()
         if (currentState is UiState.Scanning) {
@@ -388,7 +368,9 @@ class ProductViewModel @Inject constructor(
                     scannedItems = newList
                 )
             }
-            _backStack.value = backStack.dropLast(1) + updatedState
+            withContext(Dispatchers.Main) {
+                _backStack.value = backStack.dropLast(1) + updatedState
+            }
         }
     }
 
@@ -478,5 +460,9 @@ class ProductViewModel @Inject constructor(
                 _backStack.value = stackWithoutError
             }
         }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
     }
 }
