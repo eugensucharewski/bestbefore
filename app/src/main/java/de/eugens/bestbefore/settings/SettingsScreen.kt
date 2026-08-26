@@ -16,6 +16,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.compose.ui.text.style.TextAlign
 import de.eugens.bestbefore.R
 import java.util.Locale
 
@@ -146,6 +147,23 @@ fun SettingsScreen(
                     }
                 }
             }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+
+            Text(
+                text = stringResource(R.string.about_app),
+                style = MaterialTheme.typography.titleSmall,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+
+            Text(
+                text = stringResource(R.string.legal_disclaimer_text),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Justify
+            )
 
             Spacer(modifier = Modifier.weight(1f))
 

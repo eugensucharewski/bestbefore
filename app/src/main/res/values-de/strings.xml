@@ -59,4 +59,6 @@
     <string name="delete_selected">Ausgewählte löschen</string>
     <string name="delete_selected_confirm_title">Ausgewählte Produkte löschen?</string>
     <string name="delete_selected_confirm_text">Sind Sie sicher, dass Sie %d ausgewählte Produkte löschen möchten?</string>
+    <string name="about_app">Über &amp; Rechtliches</string>
+    <string name="legal_disclaimer_text">Diese Anwendung dient nur zu Bildungs- und persönlichen Zwecken. Sie ersetzt nicht die manuelle Prüfung des Lebensmittelzustands. Der Entwickler haftet nicht für Folgen der Nutzung dieser App oder Ungenauigkeiten in den Benachrichtigungen. Es werden keine Nutzerdaten vom Entwickler gespeichert; alle Daten befinden sich in Ihrer persönlichen Firebase-Instanz.</string>
 </resources>

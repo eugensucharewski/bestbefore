@@ -59,4 +59,6 @@
     <string name="delete_selected">Delete Selected</string>
     <string name="delete_selected_confirm_title">Delete selected products?</string>
     <string name="delete_selected_confirm_text">Are you sure you want to delete %d selected products?</string>
+    <string name="about_app">About &amp; Legal</string>
+    <string name="legal_disclaimer_text">This application is for educational/personal use only. It is not a substitute for checking food condition manually. The developer is not liable for any consequences of using this app or inaccuracies in notifications. No user data is stored by the developer; all data resides in your personal Firebase instance.</string>
 </resources>
