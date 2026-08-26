@@ -19,11 +19,11 @@ class GeminiProductAnalyzer @Inject constructor() : AIProductAnalyzer {
 
     companion object {
         private const val GEMINI_MODEL_NAME = "gemini-3.6-flash"
-        private const val SYSTEM_INSTRUCTION = "Ты — специализированный ассистент по распознаванию названий продуктов питания и их сроков годности. " +
-                "Для каждого изображения (фото продукта и фото даты) определи название продукта и срок годности. " +
-                "Верни массив JSON объектов с полями: productName (String), date_found (boolean), expiration_date (DD.MM.YYYY), production_date (YYYY-MM-DD), confidence (high/medium/low), raw_text_detected (string)."
-        private const val ANALYZE_PROMPT = "Проанализируй эти пары изображений. Каждая пара изображений - это фото продукта и его срока годности. " +
-                "Верни результат в виде JSON массива объектов ExpirationInfo."
+        private const val SYSTEM_INSTRUCTION = "You are a specialized assistant for recognizing food product names and their expiration dates. " +
+                "For each pair of images (product photo and date photo), determine the product name and expiration date. " +
+                "Return a JSON array of objects with the following fields: productName (String), date_found (boolean), expiration_date (DD.MM.YYYY), production_date (YYYY-MM-DD), confidence (high/medium/low), raw_text_detected (string)."
+        private const val ANALYZE_PROMPT = "Analyze these image pairs. Each pair consists of a product photo and its expiration date photo. " +
+                "Return the results as a JSON array of ExpirationInfo objects."
     }
 
     private val json = Json { ignoreUnknownKeys = true }

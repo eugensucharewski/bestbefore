@@ -5,8 +5,9 @@ import de.eugens.bestbefore.Constants
 import de.eugens.bestbefore.MainDispatcherRule
 import de.eugens.bestbefore.auth.data.repository.FirebaseAuthRepository
 import de.eugens.bestbefore.auth.presentation.AuthState
+import de.eugens.bestbefore.products.domain.model.ExpirationInfo
 import de.eugens.bestbefore.products.domain.model.Product
-import de.eugens.bestbefore.products.domain.repository.CameraRepository
+import de.eugens.bestbefore.products.domain.model.ScannedItem
 import de.eugens.bestbefore.products.domain.use_case.*
 import de.eugens.bestbefore.settings.domain.repository.SettingsRepository
 import io.mockk.*
@@ -34,8 +35,6 @@ class ProductViewModelTest {
     private val deleteProductUseCase: DeleteProductUseCase = mockk()
     private val analyzeImagesUseCase: AnalyzeImagesUseCase = mockk()
     private val saveAnalysisResultsUseCase: SaveAnalysisResultsUseCase = mockk()
-    private val processImageUseCase: ProcessImageUseCase = mockk()
-    private val cameraRepository: CameraRepository = mockk(relaxed = true)
     private val settingsRepository: SettingsRepository = mockk()
     private val authRepository: FirebaseAuthRepository = mockk()
 
@@ -62,8 +61,6 @@ class ProductViewModelTest {
             deleteProductUseCase,
             analyzeImagesUseCase,
             saveAnalysisResultsUseCase,
-            processImageUseCase,
-            cameraRepository,
             settingsRepository,
             authRepository
         )
@@ -216,4 +213,110 @@ class ProductViewModelTest {
             assertEquals(setOf("2"), awaitItem().selectedProductIds)
         }
     }
+
+    @Test
+    fun `deleteProduct action sets productToDelete`() = runTest {
+        val product = createProduct("1", 1)
+        viewModel.state.test {
+            viewModel.onAction(ProductIntent.DeleteProduct(product))
+            // Skip initial states if any and wait for the one with productToDelete
+            var lastState = awaitItem()
+            while (lastState.productToDelete != product) {
+                lastState = awaitItem()
+            }
+            assertEquals(product, lastState.productToDelete)
+        }
+    }
+
+    @Test
+    fun `confirmDelete action calls deleteProductUseCase`() = runTest {
+        // Given
+        val product = createProduct("1", 1)
+        coEvery { deleteProductUseCase(any()) } returns Unit
+        coEvery { getProductsUseCase() } returns emptyList()
+
+        viewModel.state.test {
+            viewModel.onAction(ProductIntent.DeleteProduct(product))
+            
+            // Wait for productToDelete to be set
+            while (awaitItem().productToDelete != product) { 
+                // Wait
+            }
+            
+            // When
+            viewModel.onAction(ProductIntent.ConfirmDelete)
+            
+            // Then
+            // Wait for productToDelete to be null and isLoading to be false
+            var finalState = awaitItem()
+            while (finalState.productToDelete != null || finalState.isLoading) {
+                finalState = awaitItem()
+            }
+            org.junit.Assert.assertNull(finalState.productToDelete)
+            coVerify { deleteProductUseCase("1") }
+        }
+    }
+
+    @Test
+    fun `deleteSelectedProducts action calls deleteProductUseCase for each id`() = runTest {
+        // Given
+        coEvery { deleteProductUseCase(any()) } returns Unit
+        coEvery { getProductsUseCase() } returns emptyList()
+
+        viewModel.state.test {
+            viewModel.onAction(ProductIntent.ToggleSelection("1"))
+            while (awaitItem().selectedProductIds.isEmpty()) { 
+                // Wait
+            }
+            
+            viewModel.onAction(ProductIntent.ToggleSelection("2"))
+            while (awaitItem().selectedProductIds.size < 2) { 
+                // Wait
+            }
+
+            // When
+            viewModel.onAction(ProductIntent.DeleteSelectedProducts)
+
+            // Then
+            var finalState = awaitItem()
+            while (finalState.selectedProductIds.isNotEmpty() || finalState.isLoading) {
+                finalState = awaitItem()
+            }
+            coVerify { deleteProductUseCase("1") }
+            coVerify { deleteProductUseCase("2") }
+            assertEquals(emptySet<String>(), finalState.selectedProductIds)
+        }
+    }
+
+    @Test
+    fun `processItems updates backstack and calls use cases`() = runTest {
+        // Given
+        val items = emptyList<ScannedItem>()
+        val analysisResults = listOf(ExpirationInfo(productName = "New", date_found = true, expiration_date = "2024-12-31"))
+        coEvery { analyzeImagesUseCase(any()) } returns analysisResults
+        coEvery { saveAnalysisResultsUseCase(any(), any()) } returns Unit
+        coEvery { getProductsUseCase() } returns emptyList()
+
+        viewModel.state.test {
+            // When
+            viewModel.processItems(items)
+
+            // Then
+            var state = awaitItem()
+            // Wait for Processing state
+            while (state.backStack.lastOrNull() !is UiState.Processing) {
+                state = awaitItem()
+            }
+            
+            // Wait for MainList state
+            while (state.backStack.lastOrNull() !is UiState.MainList || state.isLoading) {
+                state = awaitItem()
+            }
+            
+            assertEquals(UiState.MainList, state.backStack.last())
+            coVerify { analyzeImagesUseCase(items) }
+            coVerify { saveAnalysisResultsUseCase(analysisResults, items) }
+        }
+    }
 }
+

@@ -15,6 +15,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.app.NotificationCompat
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation3.runtime.NavEntry
 import androidx.navigation3.ui.NavDisplay
@@ -37,10 +38,10 @@ import kotlinx.coroutines.flow.collectLatest
 @OptIn(ExperimentalPermissionsApi::class)
 @Composable
 fun ProductsScreen(
-    productViewModel: ProductViewModel = viewModel(),
-    authViewModel: AuthViewModel = viewModel(),
-    settingsViewModel: SettingsViewModel = viewModel(),
-    editProductViewModel: EditProductViewModel = viewModel()
+    productViewModel: ProductViewModel = hiltViewModel(),
+    authViewModel: AuthViewModel = hiltViewModel(),
+    settingsViewModel: SettingsViewModel = hiltViewModel(),
+    editProductViewModel: EditProductViewModel = hiltViewModel()
 ) {
     val state by productViewModel.state.collectAsState()
 
@@ -136,13 +137,25 @@ fun ProductsScreen(
                                 key = uiState,
                                 contentKey = "scanning"
                             ) { activeState ->
+                                val scanningViewModel: ScanningViewModel = hiltViewModel()
+                                val scanningState by scanningViewModel.state.collectAsState()
+
+                                LaunchedEffect(Unit) {
+                                    scanningViewModel.events.collectLatest { event ->
+                                        when (event) {
+                                            is ScanningEvent.Finished -> {
+                                                productViewModel.processItems(event.items)
+                                            }
+                                        }
+                                    }
+                                }
                                 ScanningScreen(
-                                    state = activeState as UiState.Scanning,
-                                    cameraController = productViewModel.cameraController,
-                                    onFlashToggle = { enabled -> productViewModel.setFlashEnabled(enabled) },
-                                    onCaptureClick = { productViewModel.onAction(ProductIntent.RequestCapture) },
+                                    state = scanningState,
+                                    cameraController = scanningViewModel.cameraController as androidx.camera.view.LifecycleCameraController,
+                                    onFlashToggle = { enabled -> scanningViewModel.onAction(ScanningIntent.SetFlashEnabled(enabled)) },
+                                    onCaptureClick = { scanningViewModel.onAction(ScanningIntent.RequestCapture) },
                                     onCancel = { productViewModel.onAction(ProductIntent.CancelScanning) },
-                                    onFinish = { productViewModel.onAction(ProductIntent.FinishScanning) }
+                                    onFinish = { scanningViewModel.onAction(ScanningIntent.FinishScanning) }
                                 )
                             }
 

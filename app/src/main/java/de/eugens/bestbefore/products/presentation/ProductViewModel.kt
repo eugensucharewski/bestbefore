@@ -1,6 +1,5 @@
 package de.eugens.bestbefore.products.presentation
 
-import android.graphics.Bitmap
 import android.util.Base64
 import android.util.Log
 import androidx.lifecycle.ViewModel
@@ -38,8 +37,6 @@ sealed class ProductIntent {
     data object CancelScanning : ProductIntent()
     data object OpenSettings : ProductIntent()
     data object BackToMain : ProductIntent()
-    data object RequestCapture : ProductIntent()
-    data class CapturePhoto(val bitmap: Bitmap) : ProductIntent()
     data object FinishScanning : ProductIntent()
     data class DeleteProduct(val product: Product) : ProductIntent()
     data object ConfirmDelete : ProductIntent()
@@ -86,19 +83,11 @@ class ProductViewModel @Inject constructor(
     private val deleteProductUseCase: DeleteProductUseCase,
     private val analyzeImagesUseCase: AnalyzeImagesUseCase,
     private val saveAnalysisResultsUseCase: SaveAnalysisResultsUseCase,
-    private val processImageUseCase: ProcessImageUseCase,
-    private val cameraRepository: CameraRepository,
     settingsRepository: SettingsRepository,
     private val authRepository: FirebaseAuthRepository
 ) : ViewModel() {
 
     private val formatter = DateTimeFormatter.ofPattern(Constants.DATE_FORMAT)
-
-    val cameraController = cameraRepository.getController()
-
-    fun setFlashEnabled(enabled: Boolean) {
-        cameraRepository.setFlashEnabled(enabled)
-    }
 
     companion object {
         private const val TAG = "ProductViewModel"
@@ -114,6 +103,7 @@ class ProductViewModel @Inject constructor(
     private val threshold = settingsRepository.getExpirationThresholdFlow()
         .stateIn(viewModelScope, SharingStarted.Eagerly, Constants.UPCOMING_EXPIRATION_DAYS_THRESHOLD)
 
+    @Suppress("UNCHECKED_CAST")
     val state: StateFlow<ProductScreenState> = combine(
         _backStack,
         _products,
@@ -216,9 +206,7 @@ class ProductViewModel @Inject constructor(
             is ProductIntent.CancelScanning -> cancelScanning()
             is ProductIntent.OpenSettings -> openSettings()
             is ProductIntent.BackToMain -> backToMain()
-            is ProductIntent.RequestCapture -> requestCapture()
-            is ProductIntent.CapturePhoto -> viewModelScope.launch { capturePhoto(intent.bitmap) }
-            is ProductIntent.FinishScanning -> finishScanning()
+            is ProductIntent.FinishScanning -> { /* handled by scanning session flow */ }
             is ProductIntent.DeleteProduct -> _productToDelete.value = intent.product
             is ProductIntent.ConfirmDelete -> {
                 _productToDelete.value?.let { deleteProduct(it.id) }
@@ -329,64 +317,7 @@ class ProductViewModel @Inject constructor(
         _backStack.value = listOf(UiState.MainList)
     }
 
-    private fun requestCapture() {
-        val currentState = _backStack.value.lastOrNull()
-        if (currentState is UiState.Scanning) {
-            viewModelScope.launch {
-                try {
-                    val bitmap = cameraRepository.takePicture()
-                    if (bitmap != null) {
-                        val processedBitmap = processImageUseCase(bitmap, currentState.step)
-                        capturePhoto(processedBitmap)
-                    }
-                } catch (e: Exception) {
-                    Log.e(TAG, "Photo capture failed", e)
-                }
-            }
-        }
-    }
-
-    private suspend fun capturePhoto(bitmap: Bitmap) = withContext(Dispatchers.Default) {
-        val backStack = _backStack.value
-        val currentState = backStack.lastOrNull()
-        if (currentState is UiState.Scanning) {
-            val stream = ByteArrayOutputStream()
-            bitmap.compress(Bitmap.CompressFormat.JPEG, 90, stream)
-            val byteArray = stream.toByteArray()
-
-            val updatedState = if (currentState.step == ScanStep.PRODUCT_PHOTO) {
-                currentState.copy(
-                    step = ScanStep.DATE_PHOTO,
-                    currentItem = currentState.currentItem.copy(productBitmap = byteArray)
-                )
-            } else {
-                val updatedItem = currentState.currentItem.copy(dateBitmap = byteArray)
-                val newList = currentState.scannedItems + updatedItem
-                currentState.copy(
-                    step = ScanStep.PRODUCT_PHOTO,
-                    currentItem = ScannedItem(),
-                    scannedItems = newList
-                )
-            }
-            withContext(Dispatchers.Main) {
-                _backStack.value = backStack.dropLast(1) + updatedState
-            }
-        }
-    }
-
-    private fun finishScanning() {
-        val currentState = _backStack.value.lastOrNull()
-        if (currentState is UiState.Scanning) {
-            val itemsToProcess = currentState.scannedItems
-            if (itemsToProcess.isEmpty()) {
-                _backStack.value = _backStack.value.dropLast(1)
-                return
-            }
-            processItems(itemsToProcess)
-        }
-    }
-
-    private fun processItems(items: List<ScannedItem>) {
+    fun processItems(items: List<ScannedItem>) {
         val backStack = _backStack.value
         _backStack.value = backStack + UiState.Processing
 
@@ -460,9 +391,5 @@ class ProductViewModel @Inject constructor(
                 _backStack.value = stackWithoutError
             }
         }
-    }
-
-    override fun onCleared() {
-        super.onCleared()
     }
 }
