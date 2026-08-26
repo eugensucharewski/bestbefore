@@ -21,7 +21,8 @@ sealed interface UiState : NavKey {
     data class Scanning(
         val step: ScanStep,
         val currentItem: ScannedItem = ScannedItem(),
-        val scannedItems: List<ScannedItem> = emptyList()
+        val scannedItems: List<ScannedItem> = emptyList(),
+        val scanId: String = ""
     ) : UiState
     
     @Serializable

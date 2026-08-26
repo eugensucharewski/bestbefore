@@ -46,6 +46,7 @@ class ProductViewModelTest {
     @Before
     fun setUp() {
         coEvery { getProductsUseCase() } returns emptyList()
+        coEvery { getProductsUseCase.getImage(any()) } returns null
         every { settingsRepository.getExpirationThresholdFlow() } returns thresholdFlow
         every { authRepository.observeAuthState() } returns authStateFlow
         every { authRepository.currentUserEmail } returns null
@@ -109,6 +110,27 @@ class ProductViewModelTest {
         viewModel.state.test {
             val state = awaitItem()
             assertEquals(ExpirationStatus.UPCOMING, state.products[0].status)
+        }
+    }
+
+    @Test
+    fun `parseDate handles multiple formats correctly`() = runTest {
+        // Given
+        val products = listOf(
+            Product(id = "1", name = "Format 1", expirationDate = "31.12.2025"),
+            Product(id = "2", name = "Format 2", expirationDate = "2025-12-31"),
+            Product(id = "3", name = "Format 3", expirationDate = "31/12/2025")
+        )
+        coEvery { getProductsUseCase() } returns products
+        
+        // When
+        viewModel.onAction(ProductIntent.LoadProducts)
+
+        // Then
+        viewModel.state.test {
+            val state = awaitItem()
+            assertEquals(3, state.products.size)
+            assertTrue(state.products.all { it.status != ExpirationStatus.UNKNOWN })
         }
     }
 
@@ -183,7 +205,8 @@ class ProductViewModelTest {
             // When
             viewModel.onAction(ProductIntent.StartScanning)
             // Then
-            assertTrue(awaitItem().uiState is UiState.Scanning)
+            val scanningState = awaitItem().uiState as UiState.Scanning
+            assertTrue(scanningState.scanId.isNotEmpty())
             
             // When
             viewModel.onAction(ProductIntent.CancelScanning)
@@ -318,5 +341,24 @@ class ProductViewModelTest {
             coVerify { saveAnalysisResultsUseCase(analysisResults, items) }
         }
     }
-}
 
+    @Test
+    fun `loadImage updates state with fetched image`() = runTest {
+        // Given
+        val product = createProduct("1", 1)
+        coEvery { getProductsUseCase() } returns listOf(product)
+        coEvery { getProductsUseCase.getImage("1") } returns "base64image"
+        initViewModel()
+        
+        viewModel.state.test {
+            awaitItem() // Initial
+            
+            // When
+            viewModel.onAction(ProductIntent.LoadImage("1"))
+            
+            // Then
+            val state = awaitItem()
+            assertEquals("base64image", state.products[0].imageBase64)
+        }
+    }
+}

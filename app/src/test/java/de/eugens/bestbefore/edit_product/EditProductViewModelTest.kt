@@ -4,6 +4,7 @@ import de.eugens.bestbefore.MainDispatcherRule
 import de.eugens.bestbefore.products.domain.model.Product
 import de.eugens.bestbefore.products.domain.use_case.DeleteProductUseCase
 import de.eugens.bestbefore.products.domain.use_case.UpdateProductUseCase
+import de.eugens.bestbefore.products.domain.use_case.GetProductsUseCase
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
@@ -23,10 +24,11 @@ class EditProductViewModelTest {
     private lateinit var viewModel: EditProductViewModel
     private val updateProductUseCase: UpdateProductUseCase = mockk()
     private val deleteProductUseCase: DeleteProductUseCase = mockk()
+    private val getProductsUseCase: GetProductsUseCase = mockk()
 
     @Before
     fun setUp() {
-        viewModel = EditProductViewModel(updateProductUseCase, deleteProductUseCase)
+        viewModel = EditProductViewModel(updateProductUseCase, deleteProductUseCase, getProductsUseCase)
     }
 
     @Test

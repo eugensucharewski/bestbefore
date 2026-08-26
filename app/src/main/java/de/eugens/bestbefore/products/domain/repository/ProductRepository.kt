@@ -11,4 +11,5 @@ interface ProductRepository {
     suspend fun addProduct(product: Product)
     suspend fun updateProduct(product: Product)
     suspend fun saveAnalysisResults(results: List<ExpirationInfo>, items: List<ScannedItem>)
+    suspend fun getProductImage(productId: String): String?
 }

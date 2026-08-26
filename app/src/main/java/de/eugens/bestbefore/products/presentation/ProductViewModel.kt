@@ -29,6 +29,7 @@ import java.io.ByteArrayOutputStream
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
+import java.util.UUID
 import javax.inject.Inject
 
 sealed class ProductIntent {
@@ -49,6 +50,7 @@ sealed class ProductIntent {
     data object ClearSelection : ProductIntent()
     data object DeleteSelectedProducts : ProductIntent()
     data object BackFromError : ProductIntent()
+    data class LoadImage(val productId: String) : ProductIntent()
 }
 
 sealed class ProductEvent {
@@ -61,7 +63,8 @@ enum class ExpirationStatus {
 
 data class ProductUiModel(
     val product: Product,
-    val status: ExpirationStatus
+    val status: ExpirationStatus,
+    val imageBase64: String? = null
 )
 
 data class ProductScreenState(
@@ -103,6 +106,8 @@ class ProductViewModel @Inject constructor(
     private val threshold = settingsRepository.getExpirationThresholdFlow()
         .stateIn(viewModelScope, SharingStarted.Eagerly, Constants.UPCOMING_EXPIRATION_DAYS_THRESHOLD)
 
+    private val _loadedImages = MutableStateFlow<Map<String, String>>(emptyMap())
+
     @Suppress("UNCHECKED_CAST")
     val state: StateFlow<ProductScreenState> = combine(
         _backStack,
@@ -112,6 +117,7 @@ class ProductViewModel @Inject constructor(
         _selectedProductIds,
         _isLoading,
         threshold,
+        _loadedImages,
         authRepository.observeAuthState().onStart {
             emit(authRepository.currentUserEmail?.let { AuthState.Authenticated(it) } ?: AuthState.Unauthenticated)
         }
@@ -123,11 +129,16 @@ class ProductViewModel @Inject constructor(
         val selectedProductIds = args[4] as Set<String>
         val isLoading = args[5] as Boolean
         val thresholdValue = args[6] as Int
-        val authState = args[7] as AuthState
+        val loadedImages = args[7] as Map<String, String>
+        val authState = args[8] as AuthState
 
         val filtered = applyFilter(products, filter, thresholdValue)
         val uiModels = sort(filtered).map { product ->
-            ProductUiModel(product, getExpirationStatus(product, thresholdValue))
+            ProductUiModel(
+                product = product,
+                status = getExpirationStatus(product, thresholdValue),
+                imageBase64 = loadedImages[product.id]
+            )
         }
         ProductScreenState(
             uiState = backStack.lastOrNull() ?: UiState.MainList,
@@ -152,18 +163,26 @@ class ProductViewModel @Inject constructor(
         loadProducts()
     }
 
-    private fun getExpirationStatus(product: Product, thresholdValue: Int): ExpirationStatus {
-        return try {
-            val date = LocalDate.parse(product.expirationDate, formatter)
-            val today = LocalDate.now()
-            val daysUntil = ChronoUnit.DAYS.between(today, date)
-            when {
-                daysUntil < 0 -> ExpirationStatus.EXPIRED
-                daysUntil <= thresholdValue -> ExpirationStatus.UPCOMING
-                else -> ExpirationStatus.FRESH
+    private fun parseDate(dateStr: String): LocalDate? {
+        val formats = listOf("dd.MM.yyyy", "yyyy-MM-dd", "dd/MM/yyyy", "d.M.yyyy", "yyyy/MM/dd")
+        for (format in formats) {
+            try {
+                return LocalDate.parse(dateStr.trim(), DateTimeFormatter.ofPattern(format))
+            } catch (e: Exception) {
+                continue
             }
-        } catch (e: Exception) {
-            ExpirationStatus.UNKNOWN
+        }
+        return null
+    }
+
+    private fun getExpirationStatus(product: Product, thresholdValue: Int): ExpirationStatus {
+        val date = parseDate(product.expirationDate) ?: return ExpirationStatus.UNKNOWN
+        val today = LocalDate.now()
+        val daysUntil = ChronoUnit.DAYS.between(today, date)
+        return when {
+            daysUntil < 0 -> ExpirationStatus.EXPIRED
+            daysUntil <= thresholdValue -> ExpirationStatus.UPCOMING
+            else -> ExpirationStatus.FRESH
         }
     }
 
@@ -176,27 +195,21 @@ class ProductViewModel @Inject constructor(
     }
 
     private fun sort(products: List<Product>): List<Product> {
-        return products.sortedBy { product -> LocalDate.parse(product.expirationDate, formatter) }
+        return products.sortedBy { product -> 
+            parseDate(product.expirationDate) ?: LocalDate.MAX 
+        }
     }
 
     private fun isExpired(product: Product): Boolean {
-        return try {
-            val date = LocalDate.parse(product.expirationDate, formatter)
-            date.isBefore(LocalDate.now())
-        } catch (e: Exception) {
-            false
-        }
+        val date = parseDate(product.expirationDate) ?: return false
+        return date.isBefore(LocalDate.now())
     }
 
     private fun isUpcoming(product: Product, thresholdValue: Int): Boolean {
-        return try {
-            val date = LocalDate.parse(product.expirationDate, formatter)
-            val today = LocalDate.now()
-            val daysUntil = ChronoUnit.DAYS.between(today, date)
-            daysUntil in 0..thresholdValue
-        } catch (e: Exception) {
-            false
-        }
+        val date = parseDate(product.expirationDate) ?: return false
+        val today = LocalDate.now()
+        val daysUntil = ChronoUnit.DAYS.between(today, date)
+        return daysUntil in 0..thresholdValue
     }
 
     fun onAction(intent: ProductIntent) {
@@ -221,6 +234,24 @@ class ProductViewModel @Inject constructor(
             is ProductIntent.ClearSelection -> _selectedProductIds.value = emptySet()
             is ProductIntent.DeleteSelectedProducts -> deleteSelectedProducts()
             is ProductIntent.BackFromError -> backFromError()
+            is ProductIntent.LoadImage -> loadImage(intent.productId)
+        }
+    }
+
+    private fun loadImage(productId: String) {
+        if (_loadedImages.value.containsKey(productId)) return
+        
+        viewModelScope.launch {
+            try {
+                val image = getProductsUseCase.getImage(productId)
+                if (image != null) {
+                    _loadedImages.value = _loadedImages.value.toMutableMap().apply {
+                        put(productId, image)
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "loadImage failed for $productId", e)
+            }
         }
     }
 
@@ -298,7 +329,10 @@ class ProductViewModel @Inject constructor(
     }
 
     private fun startScanning() {
-        _backStack.value = _backStack.value + UiState.Scanning(step = ScanStep.PRODUCT_PHOTO)
+        _backStack.value = _backStack.value + UiState.Scanning(
+            step = ScanStep.PRODUCT_PHOTO,
+            scanId = UUID.randomUUID().toString()
+        )
     }
 
     private fun cancelScanning() {

@@ -48,7 +48,8 @@ fun MainScreen(
     onToggleSelection: (String) -> Unit,
     onClearSelection: () -> Unit,
     onDeleteSelected: () -> Unit,
-    onSettingsClick: () -> Unit
+    onSettingsClick: () -> Unit,
+    onLoadImage: (String) -> Unit
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
     val isSelectionMode = selectedProductIds.isNotEmpty()
@@ -147,7 +148,8 @@ fun MainScreen(
                             isSelected = selectedProductIds.contains(uiModel.product.id),
                             isSelectionMode = isSelectionMode,
                             onProductClick = onProductClick,
-                            onToggleSelection = onToggleSelection
+                            onToggleSelection = onToggleSelection,
+                            onLoadImage = onLoadImage
                         )
                     }
                 }
@@ -258,12 +260,20 @@ fun ProductItem(
     isSelected: Boolean,
     isSelectionMode: Boolean,
     onProductClick: (Product) -> Unit,
-    onToggleSelection: (String) -> Unit
+    onToggleSelection: (String) -> Unit,
+    onLoadImage: (String) -> Unit
 ) {
     val product = uiModel.product
     val haptic = LocalHapticFeedback.current
-    val bitmap = remember(product.productImage) {
-        product.productImage?.let {
+
+    LaunchedEffect(product.id, product.hasImage) {
+        if (product.hasImage && uiModel.imageBase64 == null) {
+            onLoadImage(product.id)
+        }
+    }
+
+    val bitmap = remember(uiModel.imageBase64) {
+        uiModel.imageBase64?.let {
             try {
                 val decodedString = Base64.decode(it, Base64.DEFAULT)
                 BitmapFactory.decodeByteArray(decodedString, 0, decodedString.size)

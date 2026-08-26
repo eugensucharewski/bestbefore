@@ -8,4 +8,6 @@ class GetProductsUseCase @Inject constructor(
     private val repository: ProductRepository
 ) {
     suspend operator fun invoke(): List<Product> = repository.getProducts()
+
+    suspend fun getImage(productId: String): String? = repository.getProductImage(productId)
 }

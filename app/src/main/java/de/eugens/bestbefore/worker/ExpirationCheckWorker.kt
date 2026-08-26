@@ -11,7 +11,6 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
-import de.eugens.bestbefore.Constants
 import de.eugens.bestbefore.MainActivity
 import de.eugens.bestbefore.R
 import de.eugens.bestbefore.products.domain.repository.ProductRepository
@@ -29,8 +28,6 @@ class ExpirationCheckWorker @AssistedInject constructor(
     private val repository: ProductRepository,
     private val settingsRepository: SettingsRepository
 ) : CoroutineWorker(context, workerParams) {
-
-    private val formatter = DateTimeFormatter.ofPattern(Constants.DATE_FORMAT)
 
     override suspend fun doWork(): Result {
         val threshold = settingsRepository.getExpirationThresholdFlow().first()
@@ -52,17 +49,25 @@ class ExpirationCheckWorker @AssistedInject constructor(
         return Result.success()
     }
 
-    private fun getStatusForDate(product: Product, date: LocalDate, threshold: Int): ProductStatus {
-        return try {
-            val expiryDate = LocalDate.parse(product.expirationDate, formatter)
-            val daysUntil = ChronoUnit.DAYS.between(date, expiryDate)
-            when {
-                daysUntil < 0 -> ProductStatus.RED
-                daysUntil <= threshold -> ProductStatus.YELLOW
-                else -> ProductStatus.GREEN
+    private fun parseDate(dateStr: String): LocalDate? {
+        val formats = listOf("dd.MM.yyyy", "yyyy-MM-dd", "dd/MM/yyyy", "d.M.yyyy", "yyyy/MM/dd")
+        for (format in formats) {
+            try {
+                return LocalDate.parse(dateStr.trim(), DateTimeFormatter.ofPattern(format))
+            } catch (_: Exception) {
+                continue
             }
-        } catch (e: Exception) {
-            ProductStatus.GREEN
+        }
+        return null
+    }
+
+    private fun getStatusForDate(product: Product, date: LocalDate, threshold: Int): ProductStatus {
+        val expiryDate = parseDate(product.expirationDate) ?: return ProductStatus.GREEN
+        val daysUntil = ChronoUnit.DAYS.between(date, expiryDate)
+        return when {
+            daysUntil < 0 -> ProductStatus.RED
+            daysUntil <= threshold -> ProductStatus.YELLOW
+            else -> ProductStatus.GREEN
         }
     }
 

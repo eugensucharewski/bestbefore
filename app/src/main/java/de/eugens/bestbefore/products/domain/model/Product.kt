@@ -12,6 +12,7 @@ data class Product(
     val confidence: String? = null,
     val rawText: String? = null,
     val productImage: String? = null, // Base64 encoded resized image
+    val hasImage: Boolean = false,
     val userId: String? = null
 )
 

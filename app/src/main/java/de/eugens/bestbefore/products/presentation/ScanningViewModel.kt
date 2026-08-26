@@ -90,7 +90,9 @@ class ScanningViewModel @Inject constructor(
 
     private fun finishScanning() {
         viewModelScope.launch {
-            _events.emit(ScanningEvent.Finished(_state.value.scannedItems))
+            val items = _state.value.scannedItems
+            _state.value = UiState.Scanning(step = ScanStep.PRODUCT_PHOTO)
+            _events.emit(ScanningEvent.Finished(items))
         }
     }
 

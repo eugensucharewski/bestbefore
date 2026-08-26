@@ -129,7 +129,8 @@ fun ProductsScreen(
                                     onToggleSelection = { productViewModel.onAction(ProductIntent.ToggleSelection(it)) },
                                     onClearSelection = { productViewModel.onAction(ProductIntent.ClearSelection) },
                                     onDeleteSelected = { productViewModel.onAction(ProductIntent.DeleteSelectedProducts) },
-                                    onSettingsClick = { productViewModel.onAction(ProductIntent.OpenSettings) }
+                                    onSettingsClick = { productViewModel.onAction(ProductIntent.OpenSettings) },
+                                    onLoadImage = { productViewModel.onAction(ProductIntent.LoadImage(it)) }
                                 )
                             }
 

@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import de.eugens.bestbefore.products.domain.use_case.UpdateProductUseCase
 import de.eugens.bestbefore.products.domain.use_case.DeleteProductUseCase
+import de.eugens.bestbefore.products.domain.use_case.GetProductsUseCase
 import de.eugens.bestbefore.products.domain.model.Product
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -20,7 +21,8 @@ import javax.inject.Inject
 @HiltViewModel
 class EditProductViewModel @Inject constructor(
     private val updateProductUseCase: UpdateProductUseCase,
-    private val deleteProductUseCase: DeleteProductUseCase
+    private val deleteProductUseCase: DeleteProductUseCase,
+    private val getProductsUseCase: GetProductsUseCase
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(EditProductUiState())
@@ -28,17 +30,38 @@ class EditProductViewModel @Inject constructor(
 
     fun setProduct(product: Product, initialBitmap: Bitmap? = null) {
         _uiState.value = EditProductUiState(product = product, productBitmap = initialBitmap)
-        if (initialBitmap == null && product.productImage != null) {
-            loadBitmap(product.productImage)
+        if (initialBitmap == null) {
+            if (product.productImage != null) {
+                loadBitmapFromBase64(product.productImage)
+            } else if (product.hasImage) {
+                loadBitmapFromRepository(product.id)
+            }
         }
     }
 
-    private fun loadBitmap(encodedImage: String) {
+    private fun loadBitmapFromBase64(encodedImage: String) {
         viewModelScope.launch {
             val bitmap = withContext(Dispatchers.IO) {
                 try {
                     val decodedString = Base64.decode(encodedImage, Base64.DEFAULT)
                     BitmapFactory.decodeByteArray(decodedString, 0, decodedString.size)
+                } catch (e: Exception) {
+                    null
+                }
+            }
+            _uiState.value = _uiState.value.copy(productBitmap = bitmap)
+        }
+    }
+
+    private fun loadBitmapFromRepository(productId: String) {
+        viewModelScope.launch {
+            val bitmap = withContext(Dispatchers.IO) {
+                try {
+                    val encodedImage = getProductsUseCase.getImage(productId)
+                    if (encodedImage != null) {
+                        val decodedString = Base64.decode(encodedImage, Base64.DEFAULT)
+                        BitmapFactory.decodeByteArray(decodedString, 0, decodedString.size)
+                    } else null
                 } catch (e: Exception) {
                     null
                 }

@@ -4,6 +4,10 @@ service cloud.firestore {
     match /products/{product} {
       allow read, write: if request.auth != null && request.auth.uid == resource.data.userId;
       allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+
+      match /media/{image} {
+        allow read, write: if request.auth != null && get(/databases/$(database)/documents/products/$(product)).data.userId == request.auth.uid;
+      }
     }
   }
 }
