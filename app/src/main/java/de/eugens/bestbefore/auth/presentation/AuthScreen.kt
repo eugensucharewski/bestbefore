@@ -5,18 +5,17 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.unit.dp
-
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import de.eugens.bestbefore.R
 
 @Composable
 fun AuthScreen(viewModel: AuthViewModel) {
-    val email by viewModel.email.collectAsState()
-    val password by viewModel.password.collectAsState()
-    val isSignUp by viewModel.isSignUp.collectAsState()
     val authState by viewModel.authState.collectAsState()
+    val isSignUp by viewModel.isSignUp.collectAsState()
+    val title by viewModel.title.collectAsState()
+    val buttonText by viewModel.buttonText.collectAsState()
+    val toggleText by viewModel.toggleText.collectAsState()
 
     Column(
         modifier = Modifier
@@ -26,21 +25,21 @@ fun AuthScreen(viewModel: AuthViewModel) {
         verticalArrangement = Arrangement.Center
     ) {
         Text(
-            text = if (isSignUp) stringResource(R.string.sign_up_title) else stringResource(R.string.sign_in_title),
+            text = title.asString(),
             style = MaterialTheme.typography.headlineMedium
         )
         Spacer(modifier = Modifier.height(16.dp))
         OutlinedTextField(
-            value = email,
-            onValueChange = { viewModel.onAction(AuthIntent.UpdateEmail(it)) },
+            state = viewModel.emailState,
             label = { Text(stringResource(R.string.email)) },
             modifier = Modifier.fillMaxWidth()
         )
-        OutlinedTextField(
-            value = password,
-            onValueChange = { viewModel.onAction(AuthIntent.UpdatePassword(it)) },
-            label = { Text(stringResource(R.string.password)) },
-            visualTransformation = PasswordVisualTransformation(),
+
+        OutlinedSecureTextField(
+            state = viewModel.passwordState,
+            label = {
+                Text(stringResource(R.string.password))
+            },
             modifier = Modifier.fillMaxWidth()
         )
         Spacer(modifier = Modifier.height(16.dp))
@@ -50,16 +49,15 @@ fun AuthScreen(viewModel: AuthViewModel) {
         } else {
             Button(
                 onClick = {
-                    if (isSignUp) viewModel.onAction(AuthIntent.SignUp(email, password))
-                    else viewModel.onAction(AuthIntent.SignIn(email, password))
+                    if (isSignUp) viewModel.onAction(AuthIntent.SignUp)
+                    else viewModel.onAction(AuthIntent.SignIn)
                 },
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text(if (isSignUp) stringResource(R.string.sign_up_button) else stringResource(R.string.sign_in_button))
+                Text(buttonText.asString())
             }
             TextButton(onClick = { viewModel.onAction(AuthIntent.ToggleMode) }) {
-                Text(if (isSignUp) stringResource(R.string.already_have_account) else stringResource(
-                    R.string.no_account))
+                Text(toggleText.asString())
             }
         }
 
