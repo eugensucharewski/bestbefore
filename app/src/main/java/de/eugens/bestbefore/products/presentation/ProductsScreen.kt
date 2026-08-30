@@ -113,13 +113,16 @@ fun ProductsScreen(
     ) {
         when (state.authState) {
             is AuthState.Authenticated -> {
+                val canHandleBack = state.backStack.size > 1 || state.selectedProductIds.isNotEmpty()
                 NavDisplay(
                     backStack = state.backStack,
                     onBack = {
-                        if (state.selectedProductIds.isNotEmpty()) {
-                            productViewModel.onAction(ProductIntent.ClearSelection)
-                        } else {
-                            productViewModel.onAction(ProductIntent.PopBackStack)
+                        if (canHandleBack) {
+                            if (state.selectedProductIds.isNotEmpty()) {
+                                productViewModel.onAction(ProductIntent.ClearSelection)
+                            } else {
+                                productViewModel.onAction(ProductIntent.PopBackStack)
+                            }
                         }
                     },
                     entryProvider = entryProvider {
