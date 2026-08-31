@@ -1,6 +1,7 @@
 package de.eugens.bestbefore.products.data.analyzer
 
 import android.graphics.BitmapFactory
+import android.util.Log
 import com.google.ai.client.generativeai.GenerativeModel
 import com.google.ai.client.generativeai.type.content
 import com.google.ai.client.generativeai.type.generationConfig
@@ -18,12 +19,14 @@ import javax.inject.Singleton
 class GeminiProductAnalyzer @Inject constructor() : AIProductAnalyzer {
 
     companion object {
-        private const val GEMINI_MODEL_NAME = "gemini-3.6-flash"
+        private const val TAG = "GeminiProductAnalyzer"
+        private const val GEMINI_MODEL_NAME = "gemini-3.5-flash"
         private const val SYSTEM_INSTRUCTION = "You are a specialized assistant for recognizing food product names and their expiration dates. " +
                 "For each pair of images (product photo and date photo), determine the product name and expiration date. " +
-                "Return a JSON array of objects with the following fields: productName (String), date_found (boolean), expiration_date (DD.MM.YYYY), production_date (YYYY-MM-DD), confidence (high/medium/low), raw_text_detected (string)."
+                "Return ONLY a JSON array of objects with the following fields: productName (String), date_found (boolean), expiration_date (DD.MM.YYYY), production_date (YYYY-MM-DD), confidence (high/medium/low), raw_text_detected (string). " +
+                "Do not include any markdown formatting or extra text."
         private const val ANALYZE_PROMPT = "Analyze these image pairs. Each pair consists of a product photo and its expiration date photo. " +
-                "Return the results as a JSON array of ExpirationInfo objects."
+                "Return the results as a JSON array of ExpirationInfo objects. Ensure all fields are present for each item."
     }
 
     private val json = Json { ignoreUnknownKeys = true }
@@ -59,16 +62,29 @@ class GeminiProductAnalyzer @Inject constructor() : AIProductAnalyzer {
                 )
 
                 val outputContent = response.text ?: throw Exception("Empty response from AI")
-                json.decodeFromString<List<ExpirationInfo>>(outputContent)
+                val cleanJson = extractJson(outputContent)
+                try {
+                    json.decodeFromString<List<ExpirationInfo>>(cleanJson)
+                } catch (se: Exception) {
+                    Log.e(TAG, "Failed to parse AI response. Raw text: $outputContent", se)
+                    throw Exception("AI error: invalid response format. Please try again.")
+                }
             } catch (e: Exception) {
                 val errorStr = e.toString()
                 if (errorStr.contains("503") || errorStr.contains("UNAVAILABLE")) {
                     throw Exception("AI service is currently busy (503). Please try again later.")
                 }
-                if (errorStr.contains("MissingFieldException") || errorStr.contains("SerializationException")) {
-                    throw Exception("AI error: invalid response format. Please try again.")
-                }
                 throw e
             }
         }
+
+    internal fun extractJson(text: String): String {
+        val jsonStart = text.indexOf("[")
+        val jsonEnd = text.lastIndexOf("]")
+        return if (jsonStart != -1 && jsonEnd != -1 && jsonEnd > jsonStart) {
+            text.substring(jsonStart, jsonEnd + 1)
+        } else {
+            text
+        }
+    }
 }

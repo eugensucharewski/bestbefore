@@ -2,6 +2,7 @@ package de.eugens.bestbefore.products.presentation
 
 import android.util.Base64
 import android.util.Log
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -35,7 +36,7 @@ import javax.inject.Inject
 sealed class ProductIntent {
     data object LoadProducts : ProductIntent()
     data object StartScanning : ProductIntent()
-    data object CancelScanning : ProductIntent()
+    data object PopBackStack : ProductIntent()
     data object OpenSettings : ProductIntent()
     data object BackToMain : ProductIntent()
     data object FinishScanning : ProductIntent()
@@ -87,16 +88,25 @@ class ProductViewModel @Inject constructor(
     private val analyzeImagesUseCase: AnalyzeImagesUseCase,
     private val saveAnalysisResultsUseCase: SaveAnalysisResultsUseCase,
     settingsRepository: SettingsRepository,
-    private val authRepository: FirebaseAuthRepository
+    private val authRepository: FirebaseAuthRepository,
+    private val savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
     private val formatter = DateTimeFormatter.ofPattern(Constants.DATE_FORMAT)
 
     companion object {
         private const val TAG = "ProductViewModel"
+        private const val BACKSTACK_KEY = "backstack"
     }
 
-    private val _backStack: MutableStateFlow<List<UiState>> = MutableStateFlow(listOf(UiState.MainList))
+    private val _backStack = savedStateHandle.getStateFlow(BACKSTACK_KEY, listOf<UiState>(UiState.MainList))
+    
+    private var backStack: List<UiState>
+        get() = _backStack.value
+        set(value) {
+            savedStateHandle[BACKSTACK_KEY] = value
+        }
+
     private val _products = MutableStateFlow<List<Product>>(emptyList())
     private val _currentFilter = MutableStateFlow(ProductFilter.ALL)
     private val _productToDelete = MutableStateFlow<Product?>(null)
@@ -216,7 +226,7 @@ class ProductViewModel @Inject constructor(
         when (intent) {
             is ProductIntent.LoadProducts -> loadProducts()
             is ProductIntent.StartScanning -> startScanning()
-            is ProductIntent.CancelScanning -> cancelScanning()
+            is ProductIntent.PopBackStack -> popBackStack()
             is ProductIntent.OpenSettings -> openSettings()
             is ProductIntent.BackToMain -> backToMain()
             is ProductIntent.FinishScanning -> { /* handled by scanning session flow */ }
@@ -285,7 +295,7 @@ class ProductViewModel @Inject constructor(
 
     private fun selectProductForEdit(product: Product) {
         val editState = UiState.EditProduct(product)
-        _backStack.value = _backStack.value + editState
+        backStack = backStack + editState
         viewModelScope.launch {
             val bitmapBytes = withContext(Dispatchers.IO) {
                 product.productImage?.let {
@@ -296,7 +306,7 @@ class ProductViewModel @Inject constructor(
                     }
                 }
             }
-            _backStack.value = _backStack.value.map { state ->
+            backStack = backStack.map { state ->
                 if (state is UiState.EditProduct && state.product.id == product.id) {
                     state.copy(productBitmap = bitmapBytes)
                 } else {
@@ -314,7 +324,7 @@ class ProductViewModel @Inject constructor(
                 throw e
             } catch (e: Exception) {
                 Log.e(TAG, "loadProducts failed", e)
-                _backStack.value = _backStack.value + UiState.Error(e.localizedMessage ?: "Failed to load products")
+                backStack = backStack + UiState.Error(e.localizedMessage ?: "Failed to load products")
             }
         }
     }
@@ -329,31 +339,30 @@ class ProductViewModel @Inject constructor(
     }
 
     private fun startScanning() {
-        _backStack.value = _backStack.value + UiState.Scanning(
+        backStack = backStack + UiState.Scanning(
             step = ScanStep.PRODUCT_PHOTO,
             scanId = UUID.randomUUID().toString()
         )
     }
 
-    private fun cancelScanning() {
-        if (_backStack.value.size > 1) {
-            _backStack.value = _backStack.value.dropLast(1)
+    private fun popBackStack() {
+        if (backStack.size > 1) {
+            backStack = backStack.dropLast(1)
         } else {
-            _backStack.value = listOf(UiState.MainList)
+            backStack = listOf(UiState.MainList)
         }
     }
 
     private fun openSettings() {
-        _backStack.value = _backStack.value + UiState.Settings
+        backStack = backStack + UiState.Settings
     }
 
     private fun backToMain() {
-        _backStack.value = listOf(UiState.MainList)
+        backStack = listOf(UiState.MainList)
     }
 
     fun processItems(items: List<ScannedItem>) {
-        val backStack = _backStack.value
-        _backStack.value = backStack + UiState.Processing
+        backStack = backStack + UiState.Processing
 
         viewModelScope.launch {
             try {
@@ -364,13 +373,13 @@ class ProductViewModel @Inject constructor(
                 saveAnalysisResultsUseCase(results, items)
 
                 refreshProducts()
-                _backStack.value = listOf(UiState.MainList)
+                backStack = listOf(UiState.MainList)
                 _events.emit(ProductEvent.NotifyCompletion)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 Log.e(TAG, "processItems failed", e)
-                _backStack.value = _backStack.value + UiState.Error(e.localizedMessage ?: "Analysis failed")
+                backStack = backStack + UiState.Error(e.localizedMessage ?: "Analysis failed")
             }
         }
     }
@@ -406,7 +415,7 @@ class ProductViewModel @Inject constructor(
             try {
                 updateProductUseCase(product)
                 refreshProducts()
-                _backStack.value = listOf(UiState.MainList)
+                backStack = listOf(UiState.MainList)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -416,13 +425,13 @@ class ProductViewModel @Inject constructor(
     }
 
     private fun backFromError() {
-        val currentBackStack = _backStack.value
+        val currentBackStack = backStack
         if (currentBackStack.lastOrNull() is UiState.Error) {
             val stackWithoutError = currentBackStack.dropLast(1)
             if (stackWithoutError.lastOrNull() is UiState.Processing) {
-                _backStack.value = stackWithoutError.dropLast(1)
+                backStack = stackWithoutError.dropLast(1)
             } else {
-                _backStack.value = stackWithoutError
+                backStack = stackWithoutError
             }
         }
     }

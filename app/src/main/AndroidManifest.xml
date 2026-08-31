@@ -5,6 +5,18 @@
     <uses-feature android:name="android.hardware.camera.any" />
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <queries>
+        <package android:name="com.google.android.gms" />
+        <intent>
+            <action android:name="com.google.android.gms.auth.api.signin.SERVICE_CONFIG_UPDATED" />
+        </intent>
+        <intent>
+            <action android:name="com.google.android.play.core.integrity.BIND_INTEGRITY_SERVICE" />
+        </intent>
+    </queries>
 
     <application
         android:name=".BestBeforeApp"
@@ -16,7 +28,11 @@
         android:localeConfig="@xml/locales_config"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/Theme.BestBefore">
+        android:theme="@style/Theme.BestBefore"
+        android:enableOnBackInvokedCallback="true">
+
+
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
