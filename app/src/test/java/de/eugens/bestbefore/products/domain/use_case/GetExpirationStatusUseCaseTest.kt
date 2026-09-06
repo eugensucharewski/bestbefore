@@ -11,32 +11,32 @@ class GetExpirationStatusUseCaseTest {
 
     private val parseExpirationDateUseCase = ParseExpirationDateUseCase()
     private val useCase = GetExpirationStatusUseCase(parseExpirationDateUseCase)
-    private val today = LocalDate.now()
+    private val fixedToday = LocalDate.of(2025, 1, 15)
     private val formatter = DateTimeFormatter.ofPattern("dd.MM.yyyy")
 
     @Test
     fun `returns EXPIRED when date is in the past`() {
-        val pastDate = today.minusDays(1).format(formatter)
+        val pastDate = fixedToday.minusDays(1).format(formatter)
         val product = Product(id = "1", name = "Test", expirationDate = pastDate)
-        assertEquals(ExpirationStatus.EXPIRED, useCase(product, thresholdValue = 3))
+        assertEquals(ExpirationStatus.EXPIRED, useCase(product, thresholdValue = 3, today = fixedToday))
     }
 
     @Test
     fun `returns UPCOMING when date is today or within threshold`() {
-        val todayStr = today.format(formatter)
+        val todayStr = fixedToday.format(formatter)
         val todayProduct = Product(id = "1", name = "Test", expirationDate = todayStr)
-        assertEquals(ExpirationStatus.UPCOMING, useCase(todayProduct, thresholdValue = 3))
+        assertEquals(ExpirationStatus.UPCOMING, useCase(todayProduct, thresholdValue = 3, today = fixedToday))
 
-        val upcomingDate = today.plusDays(3).format(formatter)
+        val upcomingDate = fixedToday.plusDays(3).format(formatter)
         val upcomingProduct = Product(id = "2", name = "Test", expirationDate = upcomingDate)
-        assertEquals(ExpirationStatus.UPCOMING, useCase(upcomingProduct, thresholdValue = 3))
+        assertEquals(ExpirationStatus.UPCOMING, useCase(upcomingProduct, thresholdValue = 3, today = fixedToday))
     }
 
     @Test
     fun `returns FRESH when date is beyond threshold`() {
-        val freshDate = today.plusDays(4).format(formatter)
+        val freshDate = fixedToday.plusDays(4).format(formatter)
         val product = Product(id = "1", name = "Test", expirationDate = freshDate)
-        assertEquals(ExpirationStatus.FRESH, useCase(product, thresholdValue = 3))
+        assertEquals(ExpirationStatus.FRESH, useCase(product, thresholdValue = 3, today = fixedToday))
     }
 
     @Test

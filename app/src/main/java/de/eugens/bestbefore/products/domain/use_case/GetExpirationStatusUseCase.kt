@@ -9,13 +9,12 @@ import javax.inject.Inject
 class GetExpirationStatusUseCase @Inject constructor(
     private val parseExpirationDateUseCase: ParseExpirationDateUseCase
 ) {
-    operator fun invoke(product: Product, thresholdValue: Int): ExpirationStatus {
-        return invoke(product.expirationDate, thresholdValue)
+    operator fun invoke(product: Product, thresholdValue: Int, today: LocalDate = LocalDate.now()): ExpirationStatus {
+        return invoke(product.expirationDate, thresholdValue, today)
     }
 
-    operator fun invoke(expirationDate: String?, thresholdValue: Int): ExpirationStatus {
+    operator fun invoke(expirationDate: String?, thresholdValue: Int, today: LocalDate = LocalDate.now()): ExpirationStatus {
         val date = parseExpirationDateUseCase(expirationDate) ?: return ExpirationStatus.UNKNOWN
-        val today = LocalDate.now()
         val daysUntil = ChronoUnit.DAYS.between(today, date)
         return when {
             daysUntil < 0 -> ExpirationStatus.EXPIRED
