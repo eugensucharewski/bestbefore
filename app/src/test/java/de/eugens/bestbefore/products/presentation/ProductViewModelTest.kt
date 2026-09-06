@@ -7,11 +7,26 @@ import de.eugens.bestbefore.MainDispatcherRule
 import de.eugens.bestbefore.auth.data.repository.FirebaseAuthRepository
 import de.eugens.bestbefore.auth.presentation.AuthState
 import de.eugens.bestbefore.products.domain.model.ExpirationInfo
+import de.eugens.bestbefore.products.domain.model.ExpirationStatus
 import de.eugens.bestbefore.products.domain.model.Product
 import de.eugens.bestbefore.products.domain.model.ScannedItem
-import de.eugens.bestbefore.products.domain.use_case.*
+import de.eugens.bestbefore.products.domain.use_case.AddProductUseCase
+import de.eugens.bestbefore.products.domain.use_case.AnalyzeImagesUseCase
+import de.eugens.bestbefore.products.domain.use_case.DeleteProductUseCase
+import de.eugens.bestbefore.products.domain.use_case.FilterProductsUseCase
+import de.eugens.bestbefore.products.domain.use_case.FormatExpirationDateUseCase
+import de.eugens.bestbefore.products.domain.use_case.GetExpirationStatusUseCase
+import de.eugens.bestbefore.products.domain.use_case.GetProductImageFileUseCase
+import de.eugens.bestbefore.products.domain.use_case.GetProductsUseCase
+import de.eugens.bestbefore.products.domain.use_case.ParseExpirationDateUseCase
+import de.eugens.bestbefore.products.domain.use_case.SaveAnalysisResultsUseCase
+import de.eugens.bestbefore.products.domain.use_case.SortProductsUseCase
+import de.eugens.bestbefore.products.domain.use_case.UpdateProductUseCase
 import de.eugens.bestbefore.settings.domain.repository.SettingsRepository
-import io.mockk.*
+import io.mockk.coEvery
+import io.mockk.coVerify
+import io.mockk.every
+import io.mockk.mockk
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.runTest
@@ -59,6 +74,12 @@ class ProductViewModelTest {
     }
 
     private fun initViewModel() {
+        val parseExpirationDateUseCase = ParseExpirationDateUseCase()
+        val getExpirationStatusUseCase = GetExpirationStatusUseCase(parseExpirationDateUseCase)
+        val filterProductsUseCase = FilterProductsUseCase(getExpirationStatusUseCase)
+        val sortProductsUseCase = SortProductsUseCase(parseExpirationDateUseCase)
+        val formatExpirationDateUseCase = FormatExpirationDateUseCase(parseExpirationDateUseCase)
+
         viewModel = ProductViewModel(
             getProductsUseCase,
             addProductUseCase,
@@ -67,6 +88,10 @@ class ProductViewModelTest {
             analyzeImagesUseCase,
             saveAnalysisResultsUseCase,
             getProductImageFileUseCase,
+            getExpirationStatusUseCase,
+            filterProductsUseCase,
+            sortProductsUseCase,
+            formatExpirationDateUseCase,
             settingsRepository,
             authRepository,
             SavedStateHandle()
@@ -95,7 +120,10 @@ class ProductViewModelTest {
 
         // Then
         viewModel.state.test {
-            val state = awaitItem()
+            var state = awaitItem()
+            while (state.products.isEmpty()) {
+                state = awaitItem()
+            }
             assertEquals(2, state.products.size)
             assertEquals(ExpirationStatus.EXPIRED, state.products.find { it.product.id == "1" }?.status)
             assertEquals(ExpirationStatus.FRESH, state.products.find { it.product.id == "2" }?.status)
@@ -114,7 +142,10 @@ class ProductViewModelTest {
 
         // Then
         viewModel.state.test {
-            val state = awaitItem()
+            var state = awaitItem()
+            while (state.products.isEmpty()) {
+                state = awaitItem()
+            }
             assertEquals(ExpirationStatus.UPCOMING, state.products[0].status)
         }
     }
@@ -134,7 +165,10 @@ class ProductViewModelTest {
 
         // Then
         viewModel.state.test {
-            val state = awaitItem()
+            var state = awaitItem()
+            while (state.products.size < 3) {
+                state = awaitItem()
+            }
             assertEquals(3, state.products.size)
             assertTrue(state.products.all { it.status != ExpirationStatus.UNKNOWN })
         }
@@ -155,7 +189,11 @@ class ProductViewModelTest {
 
         // Then
         viewModel.state.test {
-            assertEquals(2, awaitItem().products.size)
+            var state = awaitItem()
+            while (state.products.size < 2) {
+                state = awaitItem()
+            }
+            assertEquals(2, state.products.size)
         }
     }
 
@@ -174,7 +212,10 @@ class ProductViewModelTest {
 
         // Then
         viewModel.state.test {
-            val state = awaitItem()
+            var state = awaitItem()
+            while (state.products.size != 1 || state.products[0].product.name != "Expired") {
+                state = awaitItem()
+            }
             assertEquals(1, state.products.size)
             assertEquals("Expired", state.products[0].product.name)
         }
@@ -195,7 +236,10 @@ class ProductViewModelTest {
 
         // Then
         viewModel.state.test {
-            val state = awaitItem()
+            var state = awaitItem()
+            while (state.products.size < 3) {
+                state = awaitItem()
+            }
             assertEquals("3", state.products[0].product.id)
             assertEquals("2", state.products[1].product.id)
             assertEquals("1", state.products[2].product.id)
@@ -211,13 +255,21 @@ class ProductViewModelTest {
             // When
             viewModel.onAction(ProductIntent.StartScanning)
             // Then
-            val scanningState = awaitItem().uiState as UiState.Scanning
+            var state = awaitItem()
+            while (state.uiState !is UiState.Scanning) {
+                state = awaitItem()
+            }
+            val scanningState = state.uiState
             assertTrue(scanningState.scanId.isNotEmpty())
             
             // When
             viewModel.onAction(ProductIntent.PopBackStack)
             // Then
-            assertEquals(UiState.MainList, awaitItem().uiState)
+            var popState = awaitItem()
+            while (popState.uiState !is UiState.MainList) {
+                popState = awaitItem()
+            }
+            assertEquals(UiState.MainList, popState.uiState)
         }
     }
 
@@ -229,17 +281,29 @@ class ProductViewModelTest {
             // When
             viewModel.onAction(ProductIntent.ToggleSelection("1"))
             // Then
-            assertEquals(setOf("1"), awaitItem().selectedProductIds)
+            var state = awaitItem()
+            while (state.selectedProductIds.isEmpty()) {
+                state = awaitItem()
+            }
+            assertEquals(setOf("1"), state.selectedProductIds)
             
             // When
             viewModel.onAction(ProductIntent.ToggleSelection("1"))
             // Then
-            assertEquals(emptySet<String>(), awaitItem().selectedProductIds)
+            var state2 = awaitItem()
+            while (state2.selectedProductIds.isNotEmpty()) {
+                state2 = awaitItem()
+            }
+            assertEquals(emptySet<String>(), state2.selectedProductIds)
             
             // When
             viewModel.onAction(ProductIntent.ToggleSelection("2"))
             // Then
-            assertEquals(setOf("2"), awaitItem().selectedProductIds)
+            var state3 = awaitItem()
+            while (state3.selectedProductIds.isEmpty()) {
+                state3 = awaitItem()
+            }
+            assertEquals(setOf("2"), state3.selectedProductIds)
         }
     }
 
@@ -357,14 +421,20 @@ class ProductViewModelTest {
         initViewModel()
         
         viewModel.state.test {
-            awaitItem() // Initial
+            var state = awaitItem()
+            while (state.products.isEmpty()) {
+                state = awaitItem()
+            }
             
             // When
             viewModel.onAction(ProductIntent.LoadImage("1"))
             
             // Then
-            val state = awaitItem()
-            assertEquals("/path/to/cached/image.jpg", state.products[0].imagePath)
+            var loadedState = awaitItem()
+            while (loadedState.products.firstOrNull()?.imagePath == null) {
+                loadedState = awaitItem()
+            }
+            assertEquals("/path/to/cached/image.jpg", loadedState.products[0].imagePath)
         }
     }
 
@@ -381,7 +451,10 @@ class ProductViewModelTest {
             viewModel.onAction(ProductIntent.SelectProductForEdit(product))
             
             // Then
-            val state = awaitItem()
+            var state = awaitItem()
+            while (state.backStack.lastOrNull() !is UiState.EditProduct) {
+                state = awaitItem()
+            }
             val editState = state.backStack.last() as UiState.EditProduct
             assertEquals(product, editState.product)
             assertEquals("/path/to/cached/image.jpg", editState.imagePath)

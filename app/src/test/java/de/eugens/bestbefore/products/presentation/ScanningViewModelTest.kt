@@ -3,10 +3,11 @@ package de.eugens.bestbefore.products.presentation
 import android.graphics.Bitmap
 import app.cash.turbine.test
 import de.eugens.bestbefore.MainDispatcherRule
-import de.eugens.bestbefore.products.domain.model.ScannedItem
 import de.eugens.bestbefore.products.domain.repository.CameraRepository
 import de.eugens.bestbefore.products.domain.use_case.ProcessImageUseCase
-import io.mockk.*
+import io.mockk.coEvery
+import io.mockk.every
+import io.mockk.mockk
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -27,7 +28,7 @@ class ScanningViewModelTest {
     @Before
     fun setUp() {
         every { cameraRepository.getController() } returns mockk()
-        viewModel = ScanningViewModel(cameraRepository, processImageUseCase)
+        viewModel = ScanningViewModel(cameraRepository, processImageUseCase, mainDispatcherRule.testDispatcher)
     }
 
     @Test
