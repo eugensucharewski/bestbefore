@@ -3,7 +3,7 @@ package de.eugens.bestbefore.products.domain.use_case
 import android.graphics.Bitmap
 import android.graphics.Rect
 import de.eugens.bestbefore.Constants
-import de.eugens.bestbefore.products.presentation.ScanStep
+import de.eugens.bestbefore.products.domain.model.ScanStep
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
@@ -31,12 +31,19 @@ class ProcessImageUseCase @Inject constructor(
             )
         }
 
+        val left = cropRect.left.coerceIn(0, width - 1)
+        val top = cropRect.top.coerceIn(0, height - 1)
+        val right = cropRect.right.coerceIn(left + 1, width)
+        val bottom = cropRect.bottom.coerceIn(top + 1, height)
+        val cropWidth = (right - left).coerceAtLeast(1)
+        val cropHeight = (bottom - top).coerceAtLeast(1)
+
         val croppedBitmap = Bitmap.createBitmap(
             bitmap,
-            cropRect.left,
-            cropRect.top,
-            cropRect.width(),
-            cropRect.height()
+            left,
+            top,
+            cropWidth,
+            cropHeight
         )
 
         if (bitmap != croppedBitmap) {

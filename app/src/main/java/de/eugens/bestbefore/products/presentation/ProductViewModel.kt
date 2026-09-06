@@ -7,7 +7,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import de.eugens.bestbefore.Constants
-import de.eugens.bestbefore.auth.data.repository.FirebaseAuthRepository
+import de.eugens.bestbefore.auth.domain.repository.AuthRepository
 import de.eugens.bestbefore.auth.presentation.AuthState
 import de.eugens.bestbefore.products.domain.model.ExpirationStatus
 import de.eugens.bestbefore.products.domain.model.Product
@@ -98,7 +98,7 @@ class ProductViewModel @Inject constructor(
     private val sortProductsUseCase: SortProductsUseCase,
     private val formatExpirationDateUseCase: FormatExpirationDateUseCase,
     settingsRepository: SettingsRepository,
-    private val authRepository: FirebaseAuthRepository,
+    private val authRepository: AuthRepository,
     private val savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 

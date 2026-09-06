@@ -1,5 +1,6 @@
 package de.eugens.bestbefore.products.data.analyzer
 
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.util.Log
 import com.google.ai.client.generativeai.GenerativeModel
@@ -44,17 +45,24 @@ class GeminiProductAnalyzer @Inject constructor() : AIProductAnalyzer {
 
     override suspend fun analyzeImages(items: List<ScannedItem>): List<ExpirationInfo> =
         withContext(Dispatchers.IO) {
+            val decodedBitmaps = mutableListOf<Bitmap>()
             try {
                 val response = generativeModel.generateContent(
                     content {
                         items.forEach { item ->
                             item.productBitmap?.let {
                                 val bitmap = BitmapFactory.decodeByteArray(it, 0, it.size)
-                                image(bitmap)
+                                if (bitmap != null) {
+                                    decodedBitmaps.add(bitmap)
+                                    image(bitmap)
+                                }
                             }
                             item.dateBitmap?.let {
                                 val bitmap = BitmapFactory.decodeByteArray(it, 0, it.size)
-                                image(bitmap)
+                                if (bitmap != null) {
+                                    decodedBitmaps.add(bitmap)
+                                    image(bitmap)
+                                }
                             }
                         }
                         text(ANALYZE_PROMPT)
@@ -75,6 +83,12 @@ class GeminiProductAnalyzer @Inject constructor() : AIProductAnalyzer {
                     throw Exception("AI service is currently busy (503). Please try again later.")
                 }
                 throw e
+            } finally {
+                decodedBitmaps.forEach {
+                    try {
+                        if (!it.isRecycled) it.recycle()
+                    } catch (_: Exception) {}
+                }
             }
         }
 
