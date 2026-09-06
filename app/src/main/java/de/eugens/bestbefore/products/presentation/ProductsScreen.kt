@@ -7,16 +7,20 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.os.Build
-import androidx.compose.foundation.layout.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.app.NotificationCompat
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.navigation3.runtime.NavEntry
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.ui.NavDisplay
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
@@ -26,9 +30,9 @@ import de.eugens.bestbefore.Constants
 import de.eugens.bestbefore.MainActivity
 import de.eugens.bestbefore.R
 import de.eugens.bestbefore.auth.presentation.AuthIntent
+import de.eugens.bestbefore.auth.presentation.AuthScreen
 import de.eugens.bestbefore.auth.presentation.AuthState
 import de.eugens.bestbefore.auth.presentation.AuthViewModel
-import de.eugens.bestbefore.auth.presentation.AuthScreen
 import de.eugens.bestbefore.edit_product.EditProductScreen
 import de.eugens.bestbefore.edit_product.EditProductViewModel
 import de.eugens.bestbefore.settings.SettingsScreen
@@ -92,7 +96,7 @@ fun ProductsScreen(
     }
 
     LaunchedEffect(state.authState) {
-        if (state.authState is AuthState.Authenticated) {
+        if (state.authState is AuthState.Authenticated && state.products.isEmpty() && !state.isLoading) {
             productViewModel.onAction(ProductIntent.LoadProducts)
         }
     }
@@ -137,8 +141,7 @@ fun ProductsScreen(
                                 onToggleSelection = { productViewModel.onAction(ProductIntent.ToggleSelection(it)) },
                                 onClearSelection = { productViewModel.onAction(ProductIntent.ClearSelection) },
                                 onDeleteSelected = { productViewModel.onAction(ProductIntent.DeleteSelectedProducts) },
-                                onSettingsClick = { productViewModel.onAction(ProductIntent.OpenSettings) },
-                                onLoadImage = { productViewModel.onAction(ProductIntent.LoadImage(it)) }
+                                onSettingsClick = { productViewModel.onAction(ProductIntent.OpenSettings) }
                             )
                         }
 
