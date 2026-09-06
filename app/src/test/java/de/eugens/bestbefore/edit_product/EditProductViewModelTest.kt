@@ -3,8 +3,8 @@ package de.eugens.bestbefore.edit_product
 import de.eugens.bestbefore.MainDispatcherRule
 import de.eugens.bestbefore.products.domain.model.Product
 import de.eugens.bestbefore.products.domain.use_case.DeleteProductUseCase
+import de.eugens.bestbefore.products.domain.use_case.GetProductImageFileUseCase
 import de.eugens.bestbefore.products.domain.use_case.UpdateProductUseCase
-import de.eugens.bestbefore.products.domain.use_case.GetProductsUseCase
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
@@ -24,23 +24,44 @@ class EditProductViewModelTest {
     private lateinit var viewModel: EditProductViewModel
     private val updateProductUseCase: UpdateProductUseCase = mockk()
     private val deleteProductUseCase: DeleteProductUseCase = mockk()
-    private val getProductsUseCase: GetProductsUseCase = mockk()
+    private val getProductImageFileUseCase: GetProductImageFileUseCase = mockk()
 
     @Before
     fun setUp() {
-        viewModel = EditProductViewModel(updateProductUseCase, deleteProductUseCase, getProductsUseCase)
+        coEvery { getProductImageFileUseCase(any()) } returns null
+        viewModel = EditProductViewModel(
+            updateProductUseCase,
+            deleteProductUseCase,
+            getProductImageFileUseCase
+        )
     }
 
     @Test
     fun `setProduct updates state`() = runTest {
         // Given
         val product = Product(id = "1", name = "Test Product")
+        val imagePath = "/path/to/image.jpg"
         
         // When
-        viewModel.setProduct(product)
+        viewModel.setProduct(product, imagePath)
         
         // Then
         assertEquals(product, viewModel.uiState.value.product)
+        assertEquals(imagePath, viewModel.uiState.value.imagePath)
+    }
+
+    @Test
+    fun `setProduct with hasImage calls getProductImageFileUseCase`() = runTest {
+        // Given
+        val product = Product(id = "1", name = "Test Product", hasImage = true)
+        coEvery { getProductImageFileUseCase("1") } returns "/path/to/cached/image.jpg"
+
+        // When
+        viewModel.setProduct(product)
+
+        // Then
+        coVerify { getProductImageFileUseCase("1") }
+        assertEquals("/path/to/cached/image.jpg", viewModel.uiState.value.imagePath)
     }
 
     @Test

@@ -7,6 +7,7 @@ import android.util.Base64
 import androidx.core.graphics.scale
 import com.google.firebase.Firebase
 import com.google.firebase.auth.auth
+import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.firestore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import de.eugens.bestbefore.Constants
@@ -44,53 +45,186 @@ class FirebaseProductRepository @Inject constructor(
     private val auth = Firebase.auth
     private val cacheDir = File(context.cacheDir, IMAGE_CACHE_DIR).apply { mkdirs() }
 
+    private fun saveBase64ToCacheFile(
+        productId: String,
+        base64Str: String,
+        forceOverwrite: Boolean = false
+    ): File? {
+        if (base64Str.isEmpty()) return null
+        val cacheFile = File(cacheDir, productId)
+        if (!forceOverwrite && cacheFile.exists() && cacheFile.length() > 0) {
+            if (isValidImageFile(cacheFile)) {
+                return cacheFile
+            } else {
+                cacheFile.delete()
+            }
+        }
+        return try {
+            val cleanBase64 = base64Str.substringAfter(",").trim().replace(" ", "+")
+            val bytes = Base64.decode(cleanBase64, Base64.DEFAULT)
+            if (!isValidImageBytes(bytes)) {
+                return null
+            }
+            cacheFile.writeBytes(bytes)
+            cacheFile
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    private fun isValidImageBytes(bytes: ByteArray): Boolean {
+        if (bytes.isEmpty()) return false
+        return try {
+            val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)
+            options.outWidth > 0 && options.outHeight > 0
+        } catch (e: Throwable) {
+            false
+        }
+    }
+
+    private fun isValidImageFile(file: File): Boolean {
+        if (!file.exists() || file.length() == 0L) return false
+        return try {
+            val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeFile(file.absolutePath, options)
+            options.outWidth > 0 && options.outHeight > 0
+        } catch (e: Throwable) {
+            false
+        }
+    }
+
     override suspend fun getProducts(): List<Product> = withContext(Dispatchers.IO) {
         val currentUser = auth.currentUser ?: return@withContext emptyList()
         val snapshot = db.collection(Constants.COLLECTION_PRODUCTS)
             .whereEqualTo(Constants.FIELD_USER_ID, currentUser.uid)
             .get().await()
         snapshot.documents.map { doc ->
-            doc.toObject(Product::class.java)?.copy(id = doc.id) ?: Product()
+            val product = doc.toObject(Product::class.java)?.copy(id = doc.id) ?: Product()
+            val extractedImage = extractImageFromDocument(doc)
+            val isCached = File(cacheDir, doc.id).let { it.exists() && it.length() > 0 && isValidImageFile(it) }
+            val hasImage = product.hasImage || !extractedImage.isNullOrEmpty() || isCached
+            if (!extractedImage.isNullOrEmpty()) {
+                saveBase64ToCacheFile(doc.id, extractedImage)
+            }
+            product.copy(
+                hasImage = hasImage,
+                productImage = null
+            )
         }
     }
 
-    override suspend fun getProductImage(productId: String): String? = withContext(Dispatchers.IO) {
-        // 1. Try local cache
+    private fun extractImageFromDocument(doc: DocumentSnapshot): String? {
+        if (!doc.exists()) return null
+        val priorityFields = listOf(PRODUCT_IMAGE, "image", "product_image", "imageData", "data", "base64")
+        for (field in priorityFields) {
+            val value = doc.getString(field)
+            if (!value.isNullOrEmpty() && isBase64ImageHeader(value)) {
+                return value
+            }
+        }
+        val data = doc.data ?: return null
+        for ((key, value) in data) {
+            if (key in priorityFields) continue
+            if (value is String && isBase64ImageHeader(value)) {
+                return value
+            }
+        }
+        return null
+    }
+
+    private fun isBase64ImageHeader(value: String): Boolean {
+        val clean = value.trim()
+        val pureBase64 = clean.substringAfter(",")
+        return pureBase64.startsWith("/9j/") || // JPEG
+               pureBase64.startsWith("iVBORw") || // PNG
+               pureBase64.startsWith("UklGR") || // WEBP
+               pureBase64.startsWith("R0lGOD") || // GIF
+               pureBase64.startsWith("Qk") // BMP
+    }
+
+    override suspend fun getProductImageFile(productId: String): File? = withContext(Dispatchers.IO) {
         val cacheFile = File(cacheDir, productId)
-        if (cacheFile.exists()) {
-            return@withContext cacheFile.readText()
+        if (cacheFile.exists() && cacheFile.length() > 0) {
+            if (isValidImageFile(cacheFile)) {
+                return@withContext cacheFile
+            } else {
+                cacheFile.delete()
+            }
         }
 
-        // 2. Try Firestore sub-collection
+        val base64 = getProductImage(productId)
+        if (!base64.isNullOrEmpty()) {
+            return@withContext saveBase64ToCacheFile(productId, base64)
+        }
+        null
+    }
+
+    override suspend fun getProductImage(productId: String): String? = withContext(Dispatchers.IO) {
+        val cacheFile = File(cacheDir, productId)
+        if (cacheFile.exists() && cacheFile.length() > 0) {
+            if (isValidImageFile(cacheFile)) {
+                return@withContext try {
+                    Base64.encodeToString(cacheFile.readBytes(), Base64.NO_WRAP)
+                } catch (e: Exception) {
+                    null
+                }
+            } else {
+                cacheFile.delete()
+            }
+        }
+
+        // 1. Try Firestore sub-collection "media"
+        try {
+            val mediaSnapshot = db.collection(Constants.COLLECTION_PRODUCTS)
+                .document(productId)
+                .collection(SUB_COLLECTION_MEDIA)
+                .get().await()
+
+            for (mediaDoc in mediaSnapshot.documents) {
+                val base64 = extractImageFromDocument(mediaDoc)
+                if (!base64.isNullOrEmpty()) {
+                    saveBase64ToCacheFile(productId, base64)
+                    return@withContext base64
+                }
+            }
+        } catch (_: Exception) {
+            // ignore
+        }
+
+        // 2. Try main product document in Firestore
         try {
             val doc = db.collection(Constants.COLLECTION_PRODUCTS)
                 .document(productId)
-                .collection(SUB_COLLECTION_MEDIA)
-                .document(DOC_IMAGE)
                 .get().await()
-            
-            val base64 = doc.getString(PRODUCT_IMAGE)
-            if (base64 != null) {
-                // Save to cache
-                cacheFile.writeText(base64)
+
+            val base64 = extractImageFromDocument(doc)
+            if (!base64.isNullOrEmpty()) {
+                saveBase64ToCacheFile(productId, base64)
+                return@withContext base64
             }
-            base64
         } catch (_: Exception) {
-            null
+            // ignore
         }
+
+        null
     }
 
     override suspend fun deleteProduct(productId: String) {
         withContext(Dispatchers.IO) {
             // Delete local cache
             File(cacheDir, productId).delete()
-            
-            // Delete sub-collection (manually, as Firestore doesn't delete sub-collections automatically)
-            db.collection(Constants.COLLECTION_PRODUCTS)
-                .document(productId)
-                .collection(SUB_COLLECTION_MEDIA)
-                .document(DOC_IMAGE)
-                .delete().await()
+
+            // Delete sub-collection media
+            try {
+                val mediaDocs = db.collection(Constants.COLLECTION_PRODUCTS)
+                    .document(productId)
+                    .collection(SUB_COLLECTION_MEDIA)
+                    .get().await()
+                for (doc in mediaDocs.documents) {
+                    doc.reference.delete().await()
+                }
+            } catch (_: Exception) {}
 
             db.collection(Constants.COLLECTION_PRODUCTS).document(productId).delete().await()
         }
@@ -101,7 +235,7 @@ class FirebaseProductRepository @Inject constructor(
         val snapshot = db.collection(Constants.COLLECTION_PRODUCTS)
             .whereEqualTo(Constants.FIELD_USER_ID, currentUser.uid)
             .get().await()
-        
+
         snapshot.documents.forEach { doc ->
             deleteProduct(doc.id)
         }
@@ -111,7 +245,7 @@ class FirebaseProductRepository @Inject constructor(
         withContext(Dispatchers.IO) {
             val currentUser = auth.currentUser
             val hasImage = !product.productImage.isNullOrEmpty()
-            
+
             val productMap = hashMapOf(
                 NAME to product.name,
                 EXPIRATION_DATE to product.expirationDate,
@@ -121,15 +255,15 @@ class FirebaseProductRepository @Inject constructor(
                 HAS_IMAGE to hasImage,
                 Constants.FIELD_USER_ID to currentUser?.uid
             )
-            
+
             val docRef = db.collection(Constants.COLLECTION_PRODUCTS).add(productMap).await()
-            
+
             if (hasImage) {
                 val image = product.productImage ?: return@withContext
                 val imageMap = hashMapOf(PRODUCT_IMAGE to image)
                 docRef.collection(SUB_COLLECTION_MEDIA).document(DOC_IMAGE).set(imageMap).await()
                 // Cache it
-                File(cacheDir, docRef.id).writeText(image)
+                saveBase64ToCacheFile(docRef.id, image, forceOverwrite = true)
             }
         }
     }
@@ -159,8 +293,8 @@ class FirebaseProductRepository @Inject constructor(
                     .collection(SUB_COLLECTION_MEDIA)
                     .document(DOC_IMAGE)
                     .set(imageMap).await()
-                // Cache it
-                File(cacheDir, product.id).writeText(image)
+                // Cache it (overwrite if image was updated)
+                saveBase64ToCacheFile(product.id, image, forceOverwrite = true)
             }
         }
     }
@@ -170,9 +304,9 @@ class FirebaseProductRepository @Inject constructor(
             val currentUser = auth.currentUser
             results.forEachIndexed { index, info ->
                 val productByteArray = items.getOrNull(index)?.productBitmap
-                val encodedImage = productByteArray?.let { 
+                val encodedImage = productByteArray?.let {
                     val bitmap = BitmapFactory.decodeByteArray(it, 0, it.size)
-                    resizeAndEncodeBitmap(bitmap) 
+                    resizeAndEncodeBitmap(bitmap)
                 }
                 val hasImage = encodedImage != null
 
@@ -191,7 +325,7 @@ class FirebaseProductRepository @Inject constructor(
                     val imageMap = hashMapOf(PRODUCT_IMAGE to encodedImage)
                     docRef.collection(SUB_COLLECTION_MEDIA).document(DOC_IMAGE).set(imageMap).await()
                     // Cache it
-                    File(cacheDir, docRef.id).writeText(encodedImage)
+                    saveBase64ToCacheFile(docRef.id, encodedImage, forceOverwrite = true)
                 }
             }
         }

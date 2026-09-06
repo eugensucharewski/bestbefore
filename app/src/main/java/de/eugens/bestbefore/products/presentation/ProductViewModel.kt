@@ -1,6 +1,5 @@
 package de.eugens.bestbefore.products.presentation
 
-import android.util.Base64
 import android.util.Log
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
@@ -12,11 +11,8 @@ import de.eugens.bestbefore.auth.presentation.AuthState
 import de.eugens.bestbefore.products.domain.model.Product
 import de.eugens.bestbefore.products.domain.model.ScannedItem
 import de.eugens.bestbefore.settings.domain.repository.SettingsRepository
-import de.eugens.bestbefore.products.domain.repository.CameraRepository
 import de.eugens.bestbefore.products.domain.use_case.*
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -26,7 +22,6 @@ import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.launch
-import java.io.ByteArrayOutputStream
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
@@ -65,7 +60,7 @@ enum class ExpirationStatus {
 data class ProductUiModel(
     val product: Product,
     val status: ExpirationStatus,
-    val imageBase64: String? = null
+    val imagePath: String? = null
 )
 
 data class ProductScreenState(
@@ -87,6 +82,7 @@ class ProductViewModel @Inject constructor(
     private val deleteProductUseCase: DeleteProductUseCase,
     private val analyzeImagesUseCase: AnalyzeImagesUseCase,
     private val saveAnalysisResultsUseCase: SaveAnalysisResultsUseCase,
+    private val getProductImageFileUseCase: GetProductImageFileUseCase,
     settingsRepository: SettingsRepository,
     private val authRepository: FirebaseAuthRepository,
     private val savedStateHandle: SavedStateHandle
@@ -116,7 +112,7 @@ class ProductViewModel @Inject constructor(
     private val threshold = settingsRepository.getExpirationThresholdFlow()
         .stateIn(viewModelScope, SharingStarted.Eagerly, Constants.UPCOMING_EXPIRATION_DAYS_THRESHOLD)
 
-    private val _loadedImages = MutableStateFlow<Map<String, String>>(emptyMap())
+    private val _loadedImagePaths = MutableStateFlow<Map<String, String?>>(emptyMap())
 
     @Suppress("UNCHECKED_CAST")
     val state: StateFlow<ProductScreenState> = combine(
@@ -127,7 +123,7 @@ class ProductViewModel @Inject constructor(
         _selectedProductIds,
         _isLoading,
         threshold,
-        _loadedImages,
+        _loadedImagePaths,
         authRepository.observeAuthState().onStart {
             emit(authRepository.currentUserEmail?.let { AuthState.Authenticated(it) } ?: AuthState.Unauthenticated)
         }
@@ -139,7 +135,7 @@ class ProductViewModel @Inject constructor(
         val selectedProductIds = args[4] as Set<String>
         val isLoading = args[5] as Boolean
         val thresholdValue = args[6] as Int
-        val loadedImages = args[7] as Map<String, String>
+        val loadedImagePaths = args[7] as Map<String, String?>
         val authState = args[8] as AuthState
 
         val filtered = applyFilter(products, filter, thresholdValue)
@@ -147,7 +143,7 @@ class ProductViewModel @Inject constructor(
             ProductUiModel(
                 product = product,
                 status = getExpirationStatus(product, thresholdValue),
-                imageBase64 = loadedImages[product.id]
+                imagePath = loadedImagePaths[product.id]
             )
         }
         ProductScreenState(
@@ -249,18 +245,15 @@ class ProductViewModel @Inject constructor(
     }
 
     private fun loadImage(productId: String) {
-        if (_loadedImages.value.containsKey(productId)) return
+        if (_loadedImagePaths.value.containsKey(productId)) return
         
         viewModelScope.launch {
             try {
-                val image = getProductsUseCase.getImage(productId)
-                if (image != null) {
-                    _loadedImages.value = _loadedImages.value.toMutableMap().apply {
-                        put(productId, image)
-                    }
-                }
+                val imagePath = getProductImageFileUseCase(productId)
+                _loadedImagePaths.value = _loadedImagePaths.value + (productId to imagePath)
             } catch (e: Exception) {
                 Log.e(TAG, "loadImage failed for $productId", e)
+                _loadedImagePaths.value = _loadedImagePaths.value + (productId to null)
             }
         }
     }
@@ -294,25 +287,14 @@ class ProductViewModel @Inject constructor(
     }
 
     private fun selectProductForEdit(product: Product) {
-        val editState = UiState.EditProduct(product)
-        backStack = backStack + editState
         viewModelScope.launch {
-            val bitmapBytes = withContext(Dispatchers.IO) {
-                product.productImage?.let {
-                    try {
-                        Base64.decode(it, Base64.DEFAULT)
-                    } catch (e: Exception) {
-                        null
-                    }
-                }
+            val imagePath = try {
+                getProductImageFileUseCase(product.id)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to get image file for product ${product.id}", e)
+                null
             }
-            backStack = backStack.map { state ->
-                if (state is UiState.EditProduct && state.product.id == product.id) {
-                    state.copy(productBitmap = bitmapBytes)
-                } else {
-                    state
-                }
-            }
+            backStack = backStack + UiState.EditProduct(product = product, imagePath = imagePath)
         }
     }
 

@@ -1,72 +1,43 @@
 package de.eugens.bestbefore.edit_product
 
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
-import android.util.Base64
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
-import de.eugens.bestbefore.products.domain.use_case.UpdateProductUseCase
-import de.eugens.bestbefore.products.domain.use_case.DeleteProductUseCase
-import de.eugens.bestbefore.products.domain.use_case.GetProductsUseCase
 import de.eugens.bestbefore.products.domain.model.Product
-import kotlinx.coroutines.Dispatchers
+import de.eugens.bestbefore.products.domain.use_case.DeleteProductUseCase
+import de.eugens.bestbefore.products.domain.use_case.GetProductImageFileUseCase
+import de.eugens.bestbefore.products.domain.use_case.UpdateProductUseCase
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 @HiltViewModel
 class EditProductViewModel @Inject constructor(
     private val updateProductUseCase: UpdateProductUseCase,
     private val deleteProductUseCase: DeleteProductUseCase,
-    private val getProductsUseCase: GetProductsUseCase
+    private val getProductImageFileUseCase: GetProductImageFileUseCase
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(EditProductUiState())
     val uiState: StateFlow<EditProductUiState> = _uiState.asStateFlow()
 
-    fun setProduct(product: Product, initialBitmap: Bitmap? = null) {
-        _uiState.value = EditProductUiState(product = product, productBitmap = initialBitmap)
-        if (initialBitmap == null) {
-            if (product.productImage != null) {
-                loadBitmapFromBase64(product.productImage)
-            } else if (product.hasImage) {
-                loadBitmapFromRepository(product.id)
-            }
+    fun setProduct(product: Product, initialImagePath: String? = null) {
+        _uiState.value = EditProductUiState(product = product, imagePath = initialImagePath)
+        if (initialImagePath == null && product.hasImage) {
+            loadImagePathFromRepository(product.id)
         }
     }
 
-    private fun loadBitmapFromBase64(encodedImage: String) {
+    private fun loadImagePathFromRepository(productId: String) {
         viewModelScope.launch {
-            val bitmap = withContext(Dispatchers.IO) {
-                try {
-                    val decodedString = Base64.decode(encodedImage, Base64.DEFAULT)
-                    BitmapFactory.decodeByteArray(decodedString, 0, decodedString.size)
-                } catch (e: Exception) {
-                    null
-                }
+            val imagePath = try {
+                getProductImageFileUseCase(productId)
+            } catch (e: Exception) {
+                null
             }
-            _uiState.value = _uiState.value.copy(productBitmap = bitmap)
-        }
-    }
-
-    private fun loadBitmapFromRepository(productId: String) {
-        viewModelScope.launch {
-            val bitmap = withContext(Dispatchers.IO) {
-                try {
-                    val encodedImage = getProductsUseCase.getImage(productId)
-                    if (encodedImage != null) {
-                        val decodedString = Base64.decode(encodedImage, Base64.DEFAULT)
-                        BitmapFactory.decodeByteArray(decodedString, 0, decodedString.size)
-                    } else null
-                } catch (e: Exception) {
-                    null
-                }
-            }
-            _uiState.value = _uiState.value.copy(productBitmap = bitmap)
+            _uiState.value = _uiState.value.copy(imagePath = imagePath)
         }
     }
 
@@ -107,6 +78,6 @@ class EditProductViewModel @Inject constructor(
 
 data class EditProductUiState(
     val product: Product = Product(),
-    val productBitmap: Bitmap? = null,
+    val imagePath: String? = null,
     val error: String? = null
 )

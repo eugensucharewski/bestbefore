@@ -3,6 +3,7 @@ package de.eugens.bestbefore.products.domain.repository
 import de.eugens.bestbefore.products.domain.model.ExpirationInfo
 import de.eugens.bestbefore.products.domain.model.Product
 import de.eugens.bestbefore.products.domain.model.ScannedItem
+import java.io.File
 
 interface ProductRepository {
     suspend fun getProducts(): List<Product>
@@ -12,4 +13,5 @@ interface ProductRepository {
     suspend fun updateProduct(product: Product)
     suspend fun saveAnalysisResults(results: List<ExpirationInfo>, items: List<ScannedItem>)
     suspend fun getProductImage(productId: String): String?
+    suspend fun getProductImageFile(productId: String): File?
 }
