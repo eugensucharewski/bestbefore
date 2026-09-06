@@ -43,7 +43,9 @@ class FirebaseProductRepository @Inject constructor(
 
     private val db = Firebase.firestore
     private val auth = Firebase.auth
-    private val cacheDir = File(context.cacheDir, IMAGE_CACHE_DIR).apply { mkdirs() }
+    private val imagesDir = File(context.filesDir, IMAGE_CACHE_DIR).apply {
+        mkdirs()
+    }
 
     private fun saveBase64ToCacheFile(
         productId: String,
@@ -51,13 +53,9 @@ class FirebaseProductRepository @Inject constructor(
         forceOverwrite: Boolean = false
     ): File? {
         if (base64Str.isEmpty()) return null
-        val cacheFile = File(cacheDir, productId)
+        val cacheFile = File(imagesDir, productId)
         if (!forceOverwrite && cacheFile.exists() && cacheFile.length() > 0) {
-            if (isValidImageFile(cacheFile)) {
-                return cacheFile
-            } else {
-                cacheFile.delete()
-            }
+            return cacheFile
         }
         return try {
             val cleanBase64 = base64Str.substringAfter(",").trim().replace(" ", "+")
@@ -83,17 +81,6 @@ class FirebaseProductRepository @Inject constructor(
         }
     }
 
-    private fun isValidImageFile(file: File): Boolean {
-        if (!file.exists() || file.length() == 0L) return false
-        return try {
-            val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-            BitmapFactory.decodeFile(file.absolutePath, options)
-            options.outWidth > 0 && options.outHeight > 0
-        } catch (e: Throwable) {
-            false
-        }
-    }
-
     override suspend fun getProducts(): List<Product> = withContext(Dispatchers.IO) {
         val currentUser = auth.currentUser ?: return@withContext emptyList()
         val snapshot = db.collection(Constants.COLLECTION_PRODUCTS)
@@ -102,7 +89,7 @@ class FirebaseProductRepository @Inject constructor(
         snapshot.documents.map { doc ->
             val product = doc.toObject(Product::class.java)?.copy(id = doc.id) ?: Product()
             val extractedImage = extractImageFromDocument(doc)
-            val isCached = File(cacheDir, doc.id).let { it.exists() && it.length() > 0 && isValidImageFile(it) }
+            val isCached = File(imagesDir, doc.id).let { it.exists() && it.length() > 0 }
             val hasImage = product.hasImage || !extractedImage.isNullOrEmpty() || isCached
             if (!extractedImage.isNullOrEmpty()) {
                 saveBase64ToCacheFile(doc.id, extractedImage)
@@ -144,13 +131,9 @@ class FirebaseProductRepository @Inject constructor(
     }
 
     override suspend fun getProductImageFile(productId: String): File? = withContext(Dispatchers.IO) {
-        val cacheFile = File(cacheDir, productId)
+        val cacheFile = File(imagesDir, productId)
         if (cacheFile.exists() && cacheFile.length() > 0) {
-            if (isValidImageFile(cacheFile)) {
-                return@withContext cacheFile
-            } else {
-                cacheFile.delete()
-            }
+            return@withContext cacheFile
         }
 
         val base64 = getProductImage(productId)
@@ -161,16 +144,12 @@ class FirebaseProductRepository @Inject constructor(
     }
 
     override suspend fun getProductImage(productId: String): String? = withContext(Dispatchers.IO) {
-        val cacheFile = File(cacheDir, productId)
+        val cacheFile = File(imagesDir, productId)
         if (cacheFile.exists() && cacheFile.length() > 0) {
-            if (isValidImageFile(cacheFile)) {
-                return@withContext try {
-                    Base64.encodeToString(cacheFile.readBytes(), Base64.NO_WRAP)
-                } catch (e: Exception) {
-                    null
-                }
-            } else {
-                cacheFile.delete()
+            return@withContext try {
+                Base64.encodeToString(cacheFile.readBytes(), Base64.NO_WRAP)
+            } catch (e: Exception) {
+                null
             }
         }
 
@@ -213,7 +192,7 @@ class FirebaseProductRepository @Inject constructor(
     override suspend fun deleteProduct(productId: String) {
         withContext(Dispatchers.IO) {
             // Delete local cache
-            File(cacheDir, productId).delete()
+            File(imagesDir, productId).delete()
 
             // Delete sub-collection media
             try {
