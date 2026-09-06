@@ -8,7 +8,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import de.eugens.bestbefore.products.domain.model.ScannedItem
 import de.eugens.bestbefore.products.domain.repository.CameraRepository
 import de.eugens.bestbefore.products.domain.use_case.ProcessImageUseCase
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -32,7 +32,8 @@ sealed class ScanningEvent {
 @HiltViewModel
 class ScanningViewModel @Inject constructor(
     private val cameraRepository: CameraRepository,
-    private val processImageUseCase: ProcessImageUseCase
+    private val processImageUseCase: ProcessImageUseCase,
+    private val defaultDispatcher: CoroutineDispatcher
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(UiState.Scanning(step = ScanStep.PRODUCT_PHOTO))
@@ -65,7 +66,7 @@ class ScanningViewModel @Inject constructor(
         }
     }
 
-    private suspend fun capturePhoto(bitmap: Bitmap) = withContext(Dispatchers.Default) {
+    private suspend fun capturePhoto(bitmap: Bitmap) = withContext(defaultDispatcher) {
         val currentState = _state.value
         val stream = ByteArrayOutputStream()
         bitmap.compress(Bitmap.CompressFormat.JPEG, 90, stream)

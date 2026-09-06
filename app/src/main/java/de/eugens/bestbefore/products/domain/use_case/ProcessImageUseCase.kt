@@ -4,12 +4,14 @@ import android.graphics.Bitmap
 import android.graphics.Rect
 import de.eugens.bestbefore.Constants
 import de.eugens.bestbefore.products.presentation.ScanStep
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
-class ProcessImageUseCase @Inject constructor() {
-    suspend operator fun invoke(bitmap: Bitmap, step: ScanStep): Bitmap = withContext(Dispatchers.Default) {
+class ProcessImageUseCase @Inject constructor(
+    private val defaultDispatcher: CoroutineDispatcher
+) {
+    suspend operator fun invoke(bitmap: Bitmap, step: ScanStep): Bitmap = withContext(defaultDispatcher) {
         val width = bitmap.width
         val height = bitmap.height
 

@@ -8,23 +8,33 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import de.eugens.bestbefore.Constants
 import de.eugens.bestbefore.auth.data.repository.FirebaseAuthRepository
 import de.eugens.bestbefore.auth.presentation.AuthState
+import de.eugens.bestbefore.products.domain.model.ExpirationStatus
 import de.eugens.bestbefore.products.domain.model.Product
 import de.eugens.bestbefore.products.domain.model.ScannedItem
+import de.eugens.bestbefore.products.domain.use_case.AddProductUseCase
+import de.eugens.bestbefore.products.domain.use_case.AnalyzeImagesUseCase
+import de.eugens.bestbefore.products.domain.use_case.DeleteProductUseCase
+import de.eugens.bestbefore.products.domain.use_case.FilterProductsUseCase
+import de.eugens.bestbefore.products.domain.use_case.FormatExpirationDateUseCase
+import de.eugens.bestbefore.products.domain.use_case.GetExpirationStatusUseCase
+import de.eugens.bestbefore.products.domain.use_case.GetProductImageFileUseCase
+import de.eugens.bestbefore.products.domain.use_case.GetProductsUseCase
+import de.eugens.bestbefore.products.domain.use_case.SaveAnalysisResultsUseCase
+import de.eugens.bestbefore.products.domain.use_case.SortProductsUseCase
+import de.eugens.bestbefore.products.domain.use_case.UpdateProductUseCase
 import de.eugens.bestbefore.settings.domain.repository.SettingsRepository
-import de.eugens.bestbefore.products.domain.use_case.*
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.launch
-import java.time.LocalDate
-import java.time.format.DateTimeFormatter
-import java.time.temporal.ChronoUnit
 import java.util.UUID
 import javax.inject.Inject
 
@@ -53,14 +63,12 @@ sealed class ProductEvent {
     data object NotifyCompletion : ProductEvent()
 }
 
-enum class ExpirationStatus {
-    EXPIRED, UPCOMING, FRESH, UNKNOWN
-}
-
 data class ProductUiModel(
     val product: Product,
     val status: ExpirationStatus,
-    val imagePath: String? = null
+    val imagePath: String? = null,
+    val formattedExpirationDate: String = "",
+    val formattedProductionDate: String? = null
 )
 
 data class ProductScreenState(
@@ -83,20 +91,23 @@ class ProductViewModel @Inject constructor(
     private val analyzeImagesUseCase: AnalyzeImagesUseCase,
     private val saveAnalysisResultsUseCase: SaveAnalysisResultsUseCase,
     private val getProductImageFileUseCase: GetProductImageFileUseCase,
+    private val getExpirationStatusUseCase: GetExpirationStatusUseCase,
+    private val filterProductsUseCase: FilterProductsUseCase,
+    private val sortProductsUseCase: SortProductsUseCase,
+    private val formatExpirationDateUseCase: FormatExpirationDateUseCase,
     settingsRepository: SettingsRepository,
     private val authRepository: FirebaseAuthRepository,
     private val savedStateHandle: SavedStateHandle
 ) : ViewModel() {
-
-    private val formatter = DateTimeFormatter.ofPattern(Constants.DATE_FORMAT)
 
     companion object {
         private const val TAG = "ProductViewModel"
         private const val BACKSTACK_KEY = "backstack"
     }
 
-    private val _backStack = savedStateHandle.getStateFlow(BACKSTACK_KEY, listOf<UiState>(UiState.MainList))
-    
+    private val _backStack =
+        savedStateHandle.getStateFlow(BACKSTACK_KEY, listOf<UiState>(UiState.MainList))
+
     private var backStack: List<UiState>
         get() = _backStack.value
         set(value) {
@@ -110,7 +121,11 @@ class ProductViewModel @Inject constructor(
     private val _isLoading = MutableStateFlow(false)
 
     private val threshold = settingsRepository.getExpirationThresholdFlow()
-        .stateIn(viewModelScope, SharingStarted.Eagerly, Constants.UPCOMING_EXPIRATION_DAYS_THRESHOLD)
+        .stateIn(
+            viewModelScope,
+            SharingStarted.Eagerly,
+            Constants.UPCOMING_EXPIRATION_DAYS_THRESHOLD
+        )
 
     private val _loadedImagePaths = MutableStateFlow<Map<String, String?>>(emptyMap())
 
@@ -125,7 +140,8 @@ class ProductViewModel @Inject constructor(
         threshold,
         _loadedImagePaths,
         authRepository.observeAuthState().onStart {
-            emit(authRepository.currentUserEmail?.let { AuthState.Authenticated(it) } ?: AuthState.Unauthenticated)
+            emit(authRepository.currentUserEmail?.let { AuthState.Authenticated(it) }
+                ?: AuthState.Unauthenticated)
         }
     ) { args ->
         val backStack = args[0] as List<UiState>
@@ -138,12 +154,14 @@ class ProductViewModel @Inject constructor(
         val loadedImagePaths = args[7] as Map<String, String?>
         val authState = args[8] as AuthState
 
-        val filtered = applyFilter(products, filter, thresholdValue)
-        val uiModels = sort(filtered).map { product ->
+        val filtered = filterProductsUseCase(products, filter, thresholdValue)
+        val uiModels = sortProductsUseCase(filtered).map { product ->
             ProductUiModel(
                 product = product,
-                status = getExpirationStatus(product, thresholdValue),
-                imagePath = loadedImagePaths[product.id]
+                status = getExpirationStatusUseCase(product, thresholdValue),
+                imagePath = loadedImagePaths[product.id],
+                formattedExpirationDate = formatExpirationDateUseCase(product.expirationDate),
+                formattedProductionDate = product.productionDate?.let { formatExpirationDateUseCase(it) }
             )
         }
         ProductScreenState(
@@ -156,66 +174,19 @@ class ProductViewModel @Inject constructor(
             selectedProductIds = selectedProductIds,
             isLoading = isLoading
         )
-    }.stateIn(
-        scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5000),
-        initialValue = ProductScreenState()
-    )
+    }
+        .flowOn(Dispatchers.Default)
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = ProductScreenState()
+        )
 
     private val _events = MutableSharedFlow<ProductEvent>()
     val events = _events.asSharedFlow()
 
     init {
         loadProducts()
-    }
-
-    private fun parseDate(dateStr: String): LocalDate? {
-        val formats = listOf("dd.MM.yyyy", "yyyy-MM-dd", "dd/MM/yyyy", "d.M.yyyy", "yyyy/MM/dd")
-        for (format in formats) {
-            try {
-                return LocalDate.parse(dateStr.trim(), DateTimeFormatter.ofPattern(format))
-            } catch (e: Exception) {
-                continue
-            }
-        }
-        return null
-    }
-
-    private fun getExpirationStatus(product: Product, thresholdValue: Int): ExpirationStatus {
-        val date = parseDate(product.expirationDate) ?: return ExpirationStatus.UNKNOWN
-        val today = LocalDate.now()
-        val daysUntil = ChronoUnit.DAYS.between(today, date)
-        return when {
-            daysUntil < 0 -> ExpirationStatus.EXPIRED
-            daysUntil <= thresholdValue -> ExpirationStatus.UPCOMING
-            else -> ExpirationStatus.FRESH
-        }
-    }
-
-    private fun applyFilter(products: List<Product>, filter: ProductFilter, thresholdValue: Int): List<Product> {
-        return when (filter) {
-            ProductFilter.ALL -> products
-            ProductFilter.EXPIRED -> products.filter { isExpired(it) }
-            ProductFilter.EXPIRED_AND_UPCOMING -> products.filter { isExpired(it) || isUpcoming(it, thresholdValue) }
-        }
-    }
-
-    private fun sort(products: List<Product>): List<Product> {
-        return products.sortedBy { product -> 
-            parseDate(product.expirationDate) ?: LocalDate.MAX 
-        }
-    }
-
-    private fun isExpired(product: Product): Boolean {
-        val date = parseDate(product.expirationDate) ?: return false
-        return date.isBefore(LocalDate.now())
-    }
-
-    private fun isUpcoming(product: Product, thresholdValue: Int): Boolean {
-        val date = parseDate(product.expirationDate) ?: return false
-        val today = LocalDate.now()
-        val daysUntil = ChronoUnit.DAYS.between(today, date)
-        return daysUntil in 0..thresholdValue
     }
 
     fun onAction(intent: ProductIntent) {
@@ -225,12 +196,15 @@ class ProductViewModel @Inject constructor(
             is ProductIntent.PopBackStack -> popBackStack()
             is ProductIntent.OpenSettings -> openSettings()
             is ProductIntent.BackToMain -> backToMain()
-            is ProductIntent.FinishScanning -> { /* handled by scanning session flow */ }
+            is ProductIntent.FinishScanning -> { /* handled by scanning session flow */
+            }
+
             is ProductIntent.DeleteProduct -> _productToDelete.value = intent.product
             is ProductIntent.ConfirmDelete -> {
                 _productToDelete.value?.let { deleteProduct(it.id) }
                 _productToDelete.value = null
             }
+
             is ProductIntent.DismissDelete -> _productToDelete.value = null
             is ProductIntent.AddProduct -> addProduct(intent.product)
             is ProductIntent.SetFilter -> _currentFilter.value = intent.filter
@@ -246,14 +220,14 @@ class ProductViewModel @Inject constructor(
 
     private fun loadImage(productId: String) {
         if (_loadedImagePaths.value.containsKey(productId)) return
-        
+
         viewModelScope.launch {
             try {
                 val imagePath = getProductImageFileUseCase(productId)
-                _loadedImagePaths.value = _loadedImagePaths.value + (productId to imagePath)
+                _loadedImagePaths.value += (productId to imagePath)
             } catch (e: Exception) {
                 Log.e(TAG, "loadImage failed for $productId", e)
-                _loadedImagePaths.value = _loadedImagePaths.value + (productId to null)
+                _loadedImagePaths.value += (productId to null)
             }
         }
     }
@@ -270,7 +244,7 @@ class ProductViewModel @Inject constructor(
     private fun deleteSelectedProducts() {
         val idsToDelete = _selectedProductIds.value
         if (idsToDelete.isEmpty()) return
-        
+
         viewModelScope.launch {
             try {
                 idsToDelete.forEach { id ->
@@ -306,7 +280,8 @@ class ProductViewModel @Inject constructor(
                 throw e
             } catch (e: Exception) {
                 Log.e(TAG, "loadProducts failed", e)
-                backStack = backStack + UiState.Error(e.localizedMessage ?: "Failed to load products")
+                backStack =
+                    backStack + UiState.Error(e.localizedMessage ?: "Failed to load products")
             }
         }
     }

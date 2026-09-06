@@ -1,6 +1,5 @@
 package de.eugens.bestbefore.products.presentation
 
-import java.io.File
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -67,7 +66,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import de.eugens.bestbefore.R
+import de.eugens.bestbefore.products.domain.model.ExpirationStatus
 import de.eugens.bestbefore.products.domain.model.Product
+import java.io.File
 
 private val UpcomingWarningColor = Color(0xFFFFC107)
 
@@ -381,12 +382,12 @@ private fun ProductItem(
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = stringResource(R.string.expires_on, product.expirationDate),
+                    text = stringResource(R.string.expires_on, uiModel.formattedExpirationDate),
                     style = MaterialTheme.typography.bodyMedium
                 )
-                if (!product.productionDate.isNullOrEmpty()) {
+                if (!uiModel.formattedProductionDate.isNullOrEmpty()) {
                     Text(
-                        text = stringResource(R.string.production_date, product.productionDate),
+                        text = stringResource(R.string.production_date, uiModel.formattedProductionDate),
                         style = MaterialTheme.typography.labelSmall
                     )
                 }
