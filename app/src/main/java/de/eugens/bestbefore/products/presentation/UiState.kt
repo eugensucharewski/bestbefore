@@ -32,7 +32,7 @@ sealed interface UiState : NavKey {
     data object Settings : UiState
 
     @Serializable
-    data class EditProduct(val product: Product, val productBitmap: ByteArray? = null) : UiState
+    data class EditProduct(val product: Product, val imagePath: String? = null) : UiState
     
     @Serializable
     data class Success(val products: List<Product>) : UiState

@@ -6,7 +6,6 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.graphics.BitmapFactory
 import android.os.Build
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
@@ -186,13 +185,8 @@ fun ProductsScreen(
 
                         entry<UiState.EditProduct> { uiState ->
                             val editProductViewModel: EditProductViewModel = hiltViewModel()
-                            val bitmap = remember(uiState.productBitmap) {
-                                uiState.productBitmap?.let {
-                                    BitmapFactory.decodeByteArray(it, 0, it.size)
-                                }
-                            }
-                            LaunchedEffect(uiState.product, bitmap) {
-                                editProductViewModel.setProduct(uiState.product, bitmap)
+                            LaunchedEffect(uiState.product, uiState.imagePath) {
+                                editProductViewModel.setProduct(uiState.product, uiState.imagePath)
                             }
                             EditProductScreen(
                                 viewModel = editProductViewModel,

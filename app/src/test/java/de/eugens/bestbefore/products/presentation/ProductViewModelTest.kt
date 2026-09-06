@@ -1,5 +1,6 @@
 package de.eugens.bestbefore.products.presentation
 
+import androidx.lifecycle.SavedStateHandle
 import app.cash.turbine.test
 import de.eugens.bestbefore.Constants
 import de.eugens.bestbefore.MainDispatcherRule
@@ -14,6 +15,7 @@ import io.mockk.*
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.runTest
+import org.junit.Assert
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -35,6 +37,7 @@ class ProductViewModelTest {
     private val deleteProductUseCase: DeleteProductUseCase = mockk()
     private val analyzeImagesUseCase: AnalyzeImagesUseCase = mockk()
     private val saveAnalysisResultsUseCase: SaveAnalysisResultsUseCase = mockk()
+    private val getProductImageFileUseCase: GetProductImageFileUseCase = mockk()
     private val settingsRepository: SettingsRepository = mockk()
     private val authRepository: FirebaseAuthRepository = mockk()
 
@@ -47,6 +50,7 @@ class ProductViewModelTest {
     fun setUp() {
         coEvery { getProductsUseCase() } returns emptyList()
         coEvery { getProductsUseCase.getImage(any()) } returns null
+        coEvery { getProductImageFileUseCase(any()) } returns null
         every { settingsRepository.getExpirationThresholdFlow() } returns thresholdFlow
         every { authRepository.observeAuthState() } returns authStateFlow
         every { authRepository.currentUserEmail } returns null
@@ -62,8 +66,10 @@ class ProductViewModelTest {
             deleteProductUseCase,
             analyzeImagesUseCase,
             saveAnalysisResultsUseCase,
+            getProductImageFileUseCase,
             settingsRepository,
-            authRepository
+            authRepository,
+            SavedStateHandle()
         )
     }
 
@@ -209,7 +215,7 @@ class ProductViewModelTest {
             assertTrue(scanningState.scanId.isNotEmpty())
             
             // When
-            viewModel.onAction(ProductIntent.CancelScanning)
+            viewModel.onAction(ProductIntent.PopBackStack)
             // Then
             assertEquals(UiState.MainList, awaitItem().uiState)
         }
@@ -275,7 +281,7 @@ class ProductViewModelTest {
             while (finalState.productToDelete != null || finalState.isLoading) {
                 finalState = awaitItem()
             }
-            org.junit.Assert.assertNull(finalState.productToDelete)
+            Assert.assertNull(finalState.productToDelete)
             coVerify { deleteProductUseCase("1") }
         }
     }
@@ -347,7 +353,7 @@ class ProductViewModelTest {
         // Given
         val product = createProduct("1", 1)
         coEvery { getProductsUseCase() } returns listOf(product)
-        coEvery { getProductsUseCase.getImage("1") } returns "base64image"
+        coEvery { getProductImageFileUseCase("1") } returns "/path/to/cached/image.jpg"
         initViewModel()
         
         viewModel.state.test {
@@ -358,7 +364,27 @@ class ProductViewModelTest {
             
             // Then
             val state = awaitItem()
-            assertEquals("base64image", state.products[0].imageBase64)
+            assertEquals("/path/to/cached/image.jpg", state.products[0].imagePath)
+        }
+    }
+
+    @Test
+    fun `selectProductForEdit updates backstack with EditProduct state containing file path`() = runTest {
+        // Given
+        val product = createProduct("1", 1)
+        coEvery { getProductImageFileUseCase("1") } returns "/path/to/cached/image.jpg"
+
+        viewModel.state.test {
+            awaitItem() // Initial
+            
+            // When
+            viewModel.onAction(ProductIntent.SelectProductForEdit(product))
+            
+            // Then
+            val state = awaitItem()
+            val editState = state.backStack.last() as UiState.EditProduct
+            assertEquals(product, editState.product)
+            assertEquals("/path/to/cached/image.jpg", editState.imagePath)
         }
     }
 }

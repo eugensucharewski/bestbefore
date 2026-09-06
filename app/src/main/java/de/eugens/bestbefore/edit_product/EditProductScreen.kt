@@ -1,7 +1,5 @@
 package de.eugens.bestbefore.edit_product
 
-import android.graphics.Bitmap
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.aspectRatio
@@ -15,15 +13,16 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import coil.compose.AsyncImage
 import de.eugens.bestbefore.R
 import de.eugens.bestbefore.products.domain.model.Product
+import java.io.File
 
 @Composable
 fun EditProductScreen(
@@ -59,7 +58,7 @@ fun EditProductScreen(
 
     EditProductContent(
         product = uiState.product,
-        productBitmap = uiState.productBitmap,
+        imagePath = uiState.imagePath,
         onBack = onBack,
         onNameChange = viewModel::onNameChange,
         onExpirationDateChange = viewModel::onExpirationDateChange,
@@ -74,7 +73,7 @@ fun EditProductScreen(
 @Composable
 fun EditProductContent(
     product: Product,
-    productBitmap: Bitmap? = null,
+    imagePath: String? = null,
     onBack: () -> Unit,
     onNameChange: (String) -> Unit,
     onExpirationDateChange: (String) -> Unit,
@@ -108,9 +107,9 @@ fun EditProductContent(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            productBitmap?.let {
-                Image(
-                    bitmap = it.asImageBitmap(),
+            if (!imagePath.isNullOrEmpty()) {
+                AsyncImage(
+                    model = File(imagePath),
                     contentDescription = null,
                     modifier = Modifier
                         .fillMaxWidth()
@@ -145,7 +144,7 @@ fun EditProductScreenPreview() {
             name = "Test Product",
             expirationDate = "2023-12-31"
         ),
-        productBitmap = null,
+        imagePath = null,
         onBack = {},
         onNameChange = {},
         onExpirationDateChange = {},

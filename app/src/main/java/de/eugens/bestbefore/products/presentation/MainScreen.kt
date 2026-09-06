@@ -1,41 +1,84 @@
 package de.eugens.bestbefore.products.presentation
 
-import de.eugens.bestbefore.products.domain.model.Product
-
-import android.graphics.BitmapFactory
-import android.util.Base64
-import android.util.Log
-import androidx.compose.animation.core.*
+import java.io.File
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
 import de.eugens.bestbefore.R
+import de.eugens.bestbefore.products.domain.model.Product
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
+private val UpcomingWarningColor = Color(0xFFFFC107)
+
+private fun ExpirationStatus.toColor(): Color = when (this) {
+    ExpirationStatus.EXPIRED -> Color.Red
+    ExpirationStatus.UPCOMING -> UpcomingWarningColor
+    ExpirationStatus.FRESH -> Color.Green
+    ExpirationStatus.UNKNOWN -> Color.Gray
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(
     products: List<ProductUiModel>,
@@ -51,7 +94,6 @@ fun MainScreen(
     onSettingsClick: () -> Unit,
     onLoadImage: (String) -> Unit
 ) {
-    val snackbarHostState = remember { SnackbarHostState() }
     val isSelectionMode = selectedProductIds.isNotEmpty()
     var showDeleteSelectedConfirm by remember { mutableStateOf(false) }
 
@@ -85,7 +127,6 @@ fun MainScreen(
                 }
             )
         },
-        snackbarHost = { SnackbarHost(snackbarHostState) },
         floatingActionButton = {
             FloatingActionButton(onClick = onAddClick) {
                 Icon(Icons.Default.Add, contentDescription = stringResource(R.string.add))
@@ -126,19 +167,13 @@ fun MainScreen(
             )
 
             if (isLoading) {
-                LazyColumn(modifier = Modifier.fillMaxSize()) {
-                    items(10) {
-                        ShimmerProductItem()
-                    }
-                }
+                ShimmerLoadingList(modifier = Modifier.fillMaxSize())
             } else if (products.isEmpty()) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = stringResource(R.string.empty_list)
-                    )
+                    Text(text = stringResource(R.string.empty_list))
                 }
             } else {
                 LazyColumn(modifier = Modifier.fillMaxSize()) {
@@ -159,7 +194,7 @@ fun MainScreen(
 }
 
 @Composable
-fun ShimmerProductItem() {
+private fun ShimmerLoadingList(modifier: Modifier = Modifier) {
     val transition = rememberInfiniteTransition(label = "shimmer")
     val translateAnim = transition.animateFloat(
         initialValue = 0f,
@@ -167,14 +202,17 @@ fun ShimmerProductItem() {
         animationSpec = infiniteRepeatable(
             animation = tween(durationMillis = 1000, easing = LinearEasing),
             repeatMode = RepeatMode.Restart
-        ), label = "shimmer"
+        ),
+        label = "shimmerTranslate"
     )
 
-    val shimmerColors = listOf(
-        Color.LightGray.copy(alpha = 0.6f),
-        Color.LightGray.copy(alpha = 0.2f),
-        Color.LightGray.copy(alpha = 0.6f),
-    )
+    val shimmerColors = remember {
+        listOf(
+            Color.LightGray.copy(alpha = 0.6f),
+            Color.LightGray.copy(alpha = 0.2f),
+            Color.LightGray.copy(alpha = 0.6f),
+        )
+    }
 
     val brush = Brush.linearGradient(
         colors = shimmerColors,
@@ -182,6 +220,15 @@ fun ShimmerProductItem() {
         end = Offset(x = translateAnim.value, y = translateAnim.value)
     )
 
+    LazyColumn(modifier = modifier) {
+        items(10) {
+            ShimmerProductItem(brush = brush)
+        }
+    }
+}
+
+@Composable
+private fun ShimmerProductItem(brush: Brush) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -226,13 +273,13 @@ fun ShimmerProductItem() {
 }
 
 @Composable
-fun FilterChips(
+private fun FilterChips(
     currentFilter: ProductFilter,
     onFilterChange: (ProductFilter) -> Unit,
     modifier: Modifier = Modifier
 ) {
     Row(
-        modifier = modifier,
+        modifier = modifier.horizontalScroll(rememberScrollState()),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         ProductFilter.entries.forEach { filter ->
@@ -255,7 +302,7 @@ fun FilterChips(
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun ProductItem(
+private fun ProductItem(
     uiModel: ProductUiModel,
     isSelected: Boolean,
     isSelectionMode: Boolean,
@@ -267,28 +314,9 @@ fun ProductItem(
     val haptic = LocalHapticFeedback.current
 
     LaunchedEffect(product.id, product.hasImage) {
-        if (product.hasImage && uiModel.imageBase64 == null) {
+        if (uiModel.imagePath == null && product.hasImage) {
             onLoadImage(product.id)
         }
-    }
-
-    val bitmap = remember(uiModel.imageBase64) {
-        uiModel.imageBase64?.let {
-            try {
-                val decodedString = Base64.decode(it, Base64.DEFAULT)
-                BitmapFactory.decodeByteArray(decodedString, 0, decodedString.size)
-            } catch (e: Exception) {
-                Log.d("MainScreen", "decodeByteArray", e)
-                null
-            }
-        }
-    }
-
-    val statusColor = when (uiModel.status) {
-        ExpirationStatus.EXPIRED -> Color.Red
-        ExpirationStatus.UPCOMING -> Color(0xFFFFC107)
-        ExpirationStatus.FRESH -> Color.Green
-        ExpirationStatus.UNKNOWN -> Color.Gray
     }
 
     Card(
@@ -329,14 +357,14 @@ fun ProductItem(
                 Box(
                     modifier = Modifier
                         .size(12.dp)
-                        .background(statusColor, CircleShape)
+                        .background(uiModel.status.toColor(), CircleShape)
                 )
                 Spacer(modifier = Modifier.width(16.dp))
             }
 
-            if (bitmap != null) {
-                Image(
-                    bitmap = bitmap.asImageBitmap(),
+            if (!uiModel.imagePath.isNullOrEmpty()) {
+                AsyncImage(
+                    model = File(uiModel.imagePath),
                     contentDescription = null,
                     modifier = Modifier
                         .size(60.dp)
@@ -347,10 +375,20 @@ fun ProductItem(
             }
 
             Column(modifier = Modifier.weight(1f)) {
-                Text(text = product.name, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                Text(text = stringResource(R.string.expires_on, product.expirationDate))
+                Text(
+                    text = product.name,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = stringResource(R.string.expires_on, product.expirationDate),
+                    style = MaterialTheme.typography.bodyMedium
+                )
                 if (!product.productionDate.isNullOrEmpty()) {
-                    Text(text = stringResource(R.string.production_date, product.productionDate), fontSize = 12.sp)
+                    Text(
+                        text = stringResource(R.string.production_date, product.productionDate),
+                        style = MaterialTheme.typography.labelSmall
+                    )
                 }
             }
         }
