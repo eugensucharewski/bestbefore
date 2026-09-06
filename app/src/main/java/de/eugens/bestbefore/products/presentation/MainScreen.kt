@@ -47,7 +47,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -68,7 +67,6 @@ import coil.compose.AsyncImage
 import de.eugens.bestbefore.R
 import de.eugens.bestbefore.products.domain.model.ExpirationStatus
 import de.eugens.bestbefore.products.domain.model.Product
-import java.io.File
 
 private val UpcomingWarningColor = Color(0xFFFFC107)
 
@@ -92,8 +90,7 @@ fun MainScreen(
     onToggleSelection: (String) -> Unit,
     onClearSelection: () -> Unit,
     onDeleteSelected: () -> Unit,
-    onSettingsClick: () -> Unit,
-    onLoadImage: (String) -> Unit
+    onSettingsClick: () -> Unit
 ) {
     val isSelectionMode = selectedProductIds.isNotEmpty()
     var showDeleteSelectedConfirm by remember { mutableStateOf(false) }
@@ -184,8 +181,7 @@ fun MainScreen(
                             isSelected = selectedProductIds.contains(uiModel.product.id),
                             isSelectionMode = isSelectionMode,
                             onProductClick = onProductClick,
-                            onToggleSelection = onToggleSelection,
-                            onLoadImage = onLoadImage
+                            onToggleSelection = onToggleSelection
                         )
                     }
                 }
@@ -308,15 +304,25 @@ private fun ProductItem(
     isSelected: Boolean,
     isSelectionMode: Boolean,
     onProductClick: (Product) -> Unit,
-    onToggleSelection: (String) -> Unit,
-    onLoadImage: (String) -> Unit
+    onToggleSelection: (String) -> Unit
 ) {
     val product = uiModel.product
     val haptic = LocalHapticFeedback.current
 
-    LaunchedEffect(product.id, product.hasImage) {
-        if (uiModel.imagePath == null && product.hasImage) {
-            onLoadImage(product.id)
+    val onClick = remember(isSelectionMode, product.id, onToggleSelection, onProductClick) {
+        {
+            if (isSelectionMode) {
+                onToggleSelection(product.id)
+            } else {
+                onProductClick(product)
+            }
+        }
+    }
+
+    val onLongClick = remember(product.id, onToggleSelection, haptic) {
+        {
+            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            onToggleSelection(product.id)
         }
     }
 
@@ -325,17 +331,8 @@ private fun ProductItem(
             .fillMaxWidth()
             .padding(8.dp)
             .combinedClickable(
-                onClick = {
-                    if (isSelectionMode) {
-                        onToggleSelection(product.id)
-                    } else {
-                        onProductClick(product)
-                    }
-                },
-                onLongClick = {
-                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                    onToggleSelection(product.id)
-                }
+                onClick = onClick,
+                onLongClick = onLongClick
             ),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
         colors = if (isSelected) {
@@ -363,15 +360,22 @@ private fun ProductItem(
                 Spacer(modifier = Modifier.width(16.dp))
             }
 
-            if (!uiModel.imagePath.isNullOrEmpty()) {
-                AsyncImage(
-                    model = File(uiModel.imagePath),
-                    contentDescription = null,
+            if (product.hasImage) {
+                Box(
                     modifier = Modifier
                         .size(60.dp)
-                        .clip(RoundedCornerShape(8.dp)),
-                    contentScale = ContentScale.Crop
-                )
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                ) {
+                    if (!uiModel.imagePath.isNullOrEmpty()) {
+                        AsyncImage(
+                            model = uiModel.imagePath,
+                            contentDescription = null,
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop
+                        )
+                    }
+                }
                 Spacer(modifier = Modifier.width(16.dp))
             }
 

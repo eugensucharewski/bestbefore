@@ -1,6 +1,7 @@
 package de.eugens.bestbefore.products.presentation
 
 import android.util.Log
+import androidx.compose.runtime.Immutable
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -63,6 +64,7 @@ sealed class ProductEvent {
     data object NotifyCompletion : ProductEvent()
 }
 
+@Immutable
 data class ProductUiModel(
     val product: Product,
     val status: ExpirationStatus,
@@ -218,8 +220,14 @@ class ProductViewModel @Inject constructor(
         }
     }
 
+    private val loadingProductIds = mutableSetOf<String>()
+
     private fun loadImage(productId: String) {
-        if (_loadedImagePaths.value.containsKey(productId)) return
+        synchronized(loadingProductIds) {
+            if (_loadedImagePaths.value.containsKey(productId) || !loadingProductIds.add(productId)) {
+                return
+            }
+        }
 
         viewModelScope.launch {
             try {
@@ -228,6 +236,10 @@ class ProductViewModel @Inject constructor(
             } catch (e: Exception) {
                 Log.e(TAG, "loadImage failed for $productId", e)
                 _loadedImagePaths.value += (productId to null)
+            } finally {
+                synchronized(loadingProductIds) {
+                    loadingProductIds.remove(productId)
+                }
             }
         }
     }
@@ -289,7 +301,24 @@ class ProductViewModel @Inject constructor(
     private suspend fun refreshProducts() {
         _isLoading.value = true
         try {
-            _products.value = getProductsUseCase()
+            val products = getProductsUseCase()
+            val imageMap = mutableMapOf<String, String?>()
+            for (product in products) {
+                if (product.hasImage) {
+                    try {
+                        val path = getProductImageFileUseCase(product.id)
+                        if (path != null) {
+                            imageMap[product.id] = path
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to preload image for product ${product.id}", e)
+                    }
+                }
+            }
+            if (imageMap.isNotEmpty()) {
+                _loadedImagePaths.value += imageMap
+            }
+            _products.value = products
         } finally {
             _isLoading.value = false
         }
