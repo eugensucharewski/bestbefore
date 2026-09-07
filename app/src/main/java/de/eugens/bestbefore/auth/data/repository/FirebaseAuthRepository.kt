@@ -8,11 +8,9 @@ import de.eugens.bestbefore.auth.presentation.AuthState
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
-import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 import javax.inject.Singleton
-import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
 
 @Singleton
 class FirebaseAuthRepository @Inject constructor(): AuthRepository {
@@ -34,19 +32,15 @@ class FirebaseAuthRepository @Inject constructor(): AuthRepository {
         awaitClose { auth.removeAuthStateListener(listener) }
     }
 
-    override suspend fun signIn(email: String, pass: String): Result<String?> =
-        suspendCancellableCoroutine { continuation ->
-            auth.signInWithEmailAndPassword(email, pass)
-                .addOnSuccessListener { continuation.resume(Result.success(value = it.user?.email)) }
-                .addOnFailureListener { continuation.resumeWithException(it) }
-        }
+    override suspend fun signIn(email: String, pass: String): Result<String?> = runCatching {
+        val result = auth.signInWithEmailAndPassword(email, pass).await()
+        result.user?.email
+    }
 
-    override suspend fun signUp(email: String, pass: String): Result<String?> =
-        suspendCancellableCoroutine { continuation ->
-            auth.createUserWithEmailAndPassword(email, pass)
-                .addOnSuccessListener { continuation.resume(Result.success(it.user?.email)) }
-                .addOnFailureListener { continuation.resumeWithException(it) }
-        }
+    override suspend fun signUp(email: String, pass: String): Result<String?> = runCatching {
+        val result = auth.createUserWithEmailAndPassword(email, pass).await()
+        result.user?.email
+    }
 
     override suspend fun signOut() {
         auth.signOut()

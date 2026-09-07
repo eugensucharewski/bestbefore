@@ -5,6 +5,7 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
@@ -13,12 +14,13 @@ import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import de.eugens.bestbefore.MainActivity
 import de.eugens.bestbefore.R
-import de.eugens.bestbefore.products.domain.repository.ProductRepository
-import de.eugens.bestbefore.settings.domain.repository.SettingsRepository
+import de.eugens.bestbefore.products.domain.model.ExpirationStatus
 import de.eugens.bestbefore.products.domain.model.Product
+import de.eugens.bestbefore.products.domain.repository.ProductRepository
+import de.eugens.bestbefore.products.domain.use_case.ParseExpirationDateUseCase
+import de.eugens.bestbefore.settings.domain.repository.SettingsRepository
 import kotlinx.coroutines.flow.first
 import java.time.LocalDate
-import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 
 @HiltWorker
@@ -26,48 +28,47 @@ class ExpirationCheckWorker @AssistedInject constructor(
     @Assisted context: Context,
     @Assisted workerParams: WorkerParameters,
     private val repository: ProductRepository,
-    private val settingsRepository: SettingsRepository
+    private val settingsRepository: SettingsRepository,
+    private val parseExpirationDateUseCase: ParseExpirationDateUseCase
 ) : CoroutineWorker(context, workerParams) {
 
+    companion object {
+        private const val TAG = "ExpirationCheckWorker"
+    }
+
     override suspend fun doWork(): Result {
-        val threshold = settingsRepository.getExpirationThresholdFlow().first()
-        val products = repository.getProducts()
-        val today = LocalDate.now()
-        val yesterday = today.minusDays(1)
+        return try {
+            val threshold = settingsRepository.getExpirationThresholdFlow().first()
+            val products = repository.getProducts()
+            val today = LocalDate.now()
+            val yesterday = today.minusDays(1)
 
-        val changedProducts = products.filter { product ->
-            val statusYesterday = getStatusForDate(product, yesterday, threshold)
-            val statusToday = getStatusForDate(product, today, threshold)
+            val changedProducts = products.filter { product ->
+                val statusYesterday = getStatusForDate(product, yesterday, threshold)
+                val statusToday = getStatusForDate(product, today, threshold)
 
-            statusYesterday == ProductStatus.GREEN && (statusToday == ProductStatus.YELLOW || statusToday == ProductStatus.RED)
-        }
-
-        if (changedProducts.isNotEmpty()) {
-            showNotification(changedProducts)
-        }
-
-        return Result.success()
-    }
-
-    private fun parseDate(dateStr: String): LocalDate? {
-        val formats = listOf("dd.MM.yyyy", "yyyy-MM-dd", "dd/MM/yyyy", "d.M.yyyy", "yyyy/MM/dd")
-        for (format in formats) {
-            try {
-                return LocalDate.parse(dateStr.trim(), DateTimeFormatter.ofPattern(format))
-            } catch (_: Exception) {
-                continue
+                statusYesterday == ExpirationStatus.FRESH &&
+                        (statusToday == ExpirationStatus.UPCOMING || statusToday == ExpirationStatus.EXPIRED)
             }
+
+            if (changedProducts.isNotEmpty()) {
+                showNotification(changedProducts)
+            }
+
+            Result.success()
+        } catch (e: Exception) {
+            Log.e(TAG, "ExpirationCheckWorker failed", e)
+            Result.retry()
         }
-        return null
     }
 
-    private fun getStatusForDate(product: Product, date: LocalDate, threshold: Int): ProductStatus {
-        val expiryDate = parseDate(product.expirationDate) ?: return ProductStatus.GREEN
+    private fun getStatusForDate(product: Product, date: LocalDate, threshold: Int): ExpirationStatus {
+        val expiryDate = parseExpirationDateUseCase(product.expirationDate) ?: return ExpirationStatus.UNKNOWN
         val daysUntil = ChronoUnit.DAYS.between(date, expiryDate)
         return when {
-            daysUntil < 0 -> ProductStatus.RED
-            daysUntil <= threshold -> ProductStatus.YELLOW
-            else -> ProductStatus.GREEN
+            daysUntil < 0 -> ExpirationStatus.EXPIRED
+            daysUntil <= threshold -> ExpirationStatus.UPCOMING
+            else -> ExpirationStatus.FRESH
         }
     }
 
@@ -108,9 +109,5 @@ class ExpirationCheckWorker @AssistedInject constructor(
             .build()
 
         notificationManager.notify(2, notification)
-    }
-
-    enum class ProductStatus {
-        GREEN, YELLOW, RED
     }
 }

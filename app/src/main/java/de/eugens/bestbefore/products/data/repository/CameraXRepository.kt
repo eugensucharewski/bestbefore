@@ -3,7 +3,9 @@ package de.eugens.bestbefore.products.data.repository
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Matrix
-import androidx.camera.core.*
+import androidx.camera.core.ImageCapture
+import androidx.camera.core.ImageCaptureException
+import androidx.camera.core.ImageProxy
 import androidx.camera.view.CameraController
 import androidx.camera.view.LifecycleCameraController
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -20,7 +22,14 @@ import kotlin.coroutines.resumeWithException
 class CameraXRepository @Inject constructor(
     @ApplicationContext private val context: Context
 ) : CameraRepository {
-    private val cameraExecutor: ExecutorService = Executors.newSingleThreadExecutor()
+    private var cameraExecutor: ExecutorService = Executors.newSingleThreadExecutor()
+
+    private fun getExecutor(): ExecutorService {
+        if (cameraExecutor.isShutdown) {
+            cameraExecutor = Executors.newSingleThreadExecutor()
+        }
+        return cameraExecutor
+    }
 
     private val controller = LifecycleCameraController(context).apply {
         setEnabledUseCases(CameraController.IMAGE_CAPTURE)
@@ -34,11 +43,14 @@ class CameraXRepository @Inject constructor(
 
     override fun unbind() {
         controller.unbind()
+        if (!cameraExecutor.isShutdown) {
+            cameraExecutor.shutdown()
+        }
     }
 
     override suspend fun takePicture(): Bitmap? = suspendCancellableCoroutine { continuation ->
         controller.takePicture(
-            cameraExecutor,
+            getExecutor(),
             object : ImageCapture.OnImageCapturedCallback() {
                 override fun onCaptureSuccess(image: ImageProxy) {
                     try {
@@ -54,16 +66,24 @@ class CameraXRepository @Inject constructor(
                             bitmap
                         }
                         
-                        continuation.resume(resultBitmap)
+                        if (continuation.isActive) {
+                            continuation.resume(resultBitmap)
+                        } else {
+                            resultBitmap.recycle()
+                        }
                     } catch (e: Exception) {
-                        continuation.resumeWithException(e)
+                        if (continuation.isActive) {
+                            continuation.resumeWithException(e)
+                        }
                     } finally {
                         image.close()
                     }
                 }
 
                 override fun onError(exception: ImageCaptureException) {
-                    continuation.resumeWithException(exception)
+                    if (continuation.isActive) {
+                        continuation.resumeWithException(exception)
+                    }
                 }
             }
         )

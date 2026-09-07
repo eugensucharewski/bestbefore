@@ -1,9 +1,5 @@
 package de.eugens.bestbefore.products.presentation
 
-import kotlinx.serialization.Serializable
+import de.eugens.bestbefore.products.domain.model.ScanStep
 
-@Serializable
-enum class ScanStep {
-    PRODUCT_PHOTO,
-    DATE_PHOTO
-}
+typealias ScanStep = ScanStep

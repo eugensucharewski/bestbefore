@@ -45,6 +45,20 @@ class FirebaseProductRepository @Inject constructor(
     private val auth = Firebase.auth
     private val imagesDir = File(context.filesDir, IMAGE_CACHE_DIR).apply {
         mkdirs()
+        // Migrate existing cache files from cacheDir if present
+        val oldCacheDir = File(context.cacheDir, IMAGE_CACHE_DIR)
+        if (oldCacheDir.exists() && oldCacheDir.isDirectory) {
+            oldCacheDir.listFiles()?.forEach { oldFile ->
+                val newFile = File(this, oldFile.name)
+                if (!newFile.exists() && oldFile.length() > 0) {
+                    try {
+                        oldFile.copyTo(newFile, overwrite = true)
+                    } catch (_: Exception) {}
+                }
+                oldFile.delete()
+            }
+            oldCacheDir.delete()
+        }
     }
 
     private fun saveBase64ToCacheFile(
@@ -237,8 +251,8 @@ class FirebaseProductRepository @Inject constructor(
 
             val docRef = db.collection(Constants.COLLECTION_PRODUCTS).add(productMap).await()
 
-            if (hasImage) {
-                val image = product.productImage ?: return@withContext
+            val image = product.productImage
+            if (!image.isNullOrEmpty()) {
                 val imageMap = hashMapOf(PRODUCT_IMAGE to image)
                 docRef.collection(SUB_COLLECTION_MEDIA).document(DOC_IMAGE).set(imageMap).await()
                 // Cache it
@@ -264,8 +278,8 @@ class FirebaseProductRepository @Inject constructor(
             db.collection(Constants.COLLECTION_PRODUCTS)
                 .document(product.id).set(productMap).await()
 
-            if (hasImage) {
-                val image = product.productImage ?: return@withContext
+            val image = product.productImage
+            if (!image.isNullOrEmpty()) {
                 val imageMap = hashMapOf(PRODUCT_IMAGE to image)
                 db.collection(Constants.COLLECTION_PRODUCTS)
                     .document(product.id)
@@ -287,7 +301,7 @@ class FirebaseProductRepository @Inject constructor(
                     val bitmap = BitmapFactory.decodeByteArray(it, 0, it.size)
                     resizeAndEncodeBitmap(bitmap)
                 }
-                val hasImage = encodedImage != null
+                val hasImage = !encodedImage.isNullOrEmpty()
 
                 val productMap = hashMapOf(
                     NAME to info.productName,
@@ -300,7 +314,7 @@ class FirebaseProductRepository @Inject constructor(
                 )
                 val docRef = db.collection(Constants.COLLECTION_PRODUCTS).add(productMap).await()
 
-                if (hasImage && encodedImage != null) {
+                if (encodedImage != null) {
                     val imageMap = hashMapOf(PRODUCT_IMAGE to encodedImage)
                     docRef.collection(SUB_COLLECTION_MEDIA).document(DOC_IMAGE).set(imageMap).await()
                     // Cache it
