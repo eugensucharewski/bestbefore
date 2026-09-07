@@ -10,6 +10,7 @@ import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runTest
+import org.junit.Assert
 import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Rule
@@ -43,12 +44,9 @@ class ScanningViewModelTest {
     fun `capture photo transitions from product to date step`() = runTest {
         // Given
         val bitmap: Bitmap = mockk()
-        val processedBitmap: Bitmap = mockk()
+        val byteArray = byteArrayOf(1, 2, 3)
         coEvery { cameraRepository.takePicture() } returns bitmap
-        coEvery { processImageUseCase(bitmap, ScanStep.PRODUCT_PHOTO) } returns processedBitmap
-        
-        // Mock bitmap compression
-        every { processedBitmap.compress(any(), any(), any()) } returns true
+        coEvery { processImageUseCase(bitmap, ScanStep.PRODUCT_PHOTO) } returns byteArray
 
         viewModel.state.test {
             awaitItem() // Initial state
@@ -59,7 +57,7 @@ class ScanningViewModelTest {
             // Then
             val state = awaitItem()
             assertEquals(ScanStep.DATE_PHOTO, state.step)
-            org.junit.Assert.assertNotNull(state.currentItem.productBitmap)
+            Assert.assertNotNull(state.currentItem.productBitmap)
         }
     }
 
@@ -67,10 +65,9 @@ class ScanningViewModelTest {
     fun `capture second photo adds item and returns to product step`() = runTest {
         // Given
         val bitmap: Bitmap = mockk()
-        val processedBitmap: Bitmap = mockk()
+        val byteArray = byteArrayOf(1, 2, 3)
         coEvery { cameraRepository.takePicture() } returns bitmap
-        coEvery { processImageUseCase(any(), any()) } returns processedBitmap
-        every { processedBitmap.compress(any(), any(), any()) } returns true
+        coEvery { processImageUseCase(any(), any()) } returns byteArray
 
         viewModel.state.test {
             awaitItem() // Initial
@@ -93,10 +90,9 @@ class ScanningViewModelTest {
     fun `finishScanning emits Finished event with collected items`() = runTest {
         // Given
         val bitmap: Bitmap = mockk()
-        val processedBitmap: Bitmap = mockk()
+        val byteArray = byteArrayOf(1, 2, 3)
         coEvery { cameraRepository.takePicture() } returns bitmap
-        coEvery { processImageUseCase(any(), any()) } returns processedBitmap
-        every { processedBitmap.compress(any(), any(), any()) } returns true
+        coEvery { processImageUseCase(any(), any()) } returns byteArray
 
         viewModel.events.test {
             // Add one item
@@ -119,6 +115,6 @@ class ScanningViewModelTest {
     }
 
     private fun assertTrue(condition: Boolean) {
-        org.junit.Assert.assertTrue(condition)
+        Assert.assertTrue(condition)
     }
 }

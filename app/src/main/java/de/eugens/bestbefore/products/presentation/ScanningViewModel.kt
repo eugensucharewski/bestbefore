@@ -1,6 +1,5 @@
 package de.eugens.bestbefore.products.presentation
 
-import android.graphics.Bitmap
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -16,8 +15,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import java.io.ByteArrayOutputStream
 import javax.inject.Inject
 
 sealed class ScanningIntent {
@@ -54,12 +51,12 @@ class ScanningViewModel @Inject constructor(
     }
 
     private fun requestCapture() {
-        viewModelScope.launch {
+        viewModelScope.launch(defaultDispatcher) {
             try {
                 val bitmap = cameraRepository.takePicture()
                 if (bitmap != null) {
-                    val processedBitmap = processImageUseCase(bitmap, _state.value.step)
-                    capturePhoto(processedBitmap)
+                    val byteArray = processImageUseCase(bitmap, _state.value.step)
+                    onPhotoCaptured(byteArray)
                 }
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
@@ -68,12 +65,8 @@ class ScanningViewModel @Inject constructor(
         }
     }
 
-    private suspend fun capturePhoto(bitmap: Bitmap) = withContext(defaultDispatcher) {
+    private fun onPhotoCaptured(byteArray: ByteArray) {
         val currentState = _state.value
-        val stream = ByteArrayOutputStream()
-        bitmap.compress(Bitmap.CompressFormat.JPEG, 90, stream)
-        val byteArray = stream.toByteArray()
-
         val updatedState = if (currentState.step == ScanStep.PRODUCT_PHOTO) {
             currentState.copy(
                 step = ScanStep.DATE_PHOTO,

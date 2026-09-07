@@ -6,12 +6,13 @@ import de.eugens.bestbefore.Constants
 import de.eugens.bestbefore.products.domain.model.ScanStep
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
+import java.io.ByteArrayOutputStream
 import javax.inject.Inject
 
 class ProcessImageUseCase @Inject constructor(
     private val defaultDispatcher: CoroutineDispatcher
 ) {
-    suspend operator fun invoke(bitmap: Bitmap, step: ScanStep): Bitmap = withContext(defaultDispatcher) {
+    suspend operator fun invoke(bitmap: Bitmap, step: ScanStep): ByteArray = withContext(defaultDispatcher) {
         val width = bitmap.width
         val height = bitmap.height
 
@@ -46,10 +47,15 @@ class ProcessImageUseCase @Inject constructor(
             cropHeight
         )
 
+        val stream = ByteArrayOutputStream()
+        croppedBitmap.compress(Bitmap.CompressFormat.JPEG, 90, stream)
+        val byteArray = stream.toByteArray()
+
         if (bitmap != croppedBitmap) {
             bitmap.recycle()
         }
-        
-        croppedBitmap
+        croppedBitmap.recycle()
+
+        byteArray
     }
 }
