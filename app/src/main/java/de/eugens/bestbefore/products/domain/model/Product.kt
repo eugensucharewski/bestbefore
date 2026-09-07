@@ -1,6 +1,5 @@
 package de.eugens.bestbefore.products.domain.model
 
-import android.graphics.Bitmap
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -18,6 +17,6 @@ data class Product(
 
 @Serializable
 data class ScannedItem(
-    val productBitmap: ByteArray? = null,
-    val dateBitmap: ByteArray? = null
+    val productImagePath: String? = null,
+    val dateImagePath: String? = null
 )

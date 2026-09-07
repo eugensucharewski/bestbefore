@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import app.cash.turbine.test
 import de.eugens.bestbefore.MainDispatcherRule
 import de.eugens.bestbefore.products.domain.repository.CameraRepository
+import de.eugens.bestbefore.products.domain.use_case.ClearTempScanFilesUseCase
 import de.eugens.bestbefore.products.domain.use_case.ProcessImageUseCase
 import io.mockk.coEvery
 import io.mockk.every
@@ -25,11 +26,17 @@ class ScanningViewModelTest {
     private lateinit var viewModel: ScanningViewModel
     private val cameraRepository: CameraRepository = mockk()
     private val processImageUseCase: ProcessImageUseCase = mockk()
+    private val clearTempScanFilesUseCase: ClearTempScanFilesUseCase = mockk(relaxed = true)
 
     @Before
     fun setUp() {
         every { cameraRepository.getController() } returns mockk()
-        viewModel = ScanningViewModel(cameraRepository, processImageUseCase, mainDispatcherRule.testDispatcher)
+        viewModel = ScanningViewModel(
+            cameraRepository,
+            processImageUseCase,
+            clearTempScanFilesUseCase,
+            mainDispatcherRule.testDispatcher
+        )
     }
 
     @Test
@@ -44,9 +51,9 @@ class ScanningViewModelTest {
     fun `capture photo transitions from product to date step`() = runTest {
         // Given
         val bitmap: Bitmap = mockk()
-        val byteArray = byteArrayOf(1, 2, 3)
+        val imagePath = "/tmp/image.jpg"
         coEvery { cameraRepository.takePicture() } returns bitmap
-        coEvery { processImageUseCase(bitmap, ScanStep.PRODUCT_PHOTO) } returns byteArray
+        coEvery { processImageUseCase(bitmap, ScanStep.PRODUCT_PHOTO) } returns imagePath
 
         viewModel.state.test {
             awaitItem() // Initial state
@@ -57,7 +64,8 @@ class ScanningViewModelTest {
             // Then
             val state = awaitItem()
             assertEquals(ScanStep.DATE_PHOTO, state.step)
-            Assert.assertNotNull(state.currentItem.productBitmap)
+            Assert.assertNotNull(state.currentItem.productImagePath)
+            assertEquals(imagePath, state.currentItem.productImagePath)
         }
     }
 
@@ -65,9 +73,9 @@ class ScanningViewModelTest {
     fun `capture second photo adds item and returns to product step`() = runTest {
         // Given
         val bitmap: Bitmap = mockk()
-        val byteArray = byteArrayOf(1, 2, 3)
+        val imagePath = "/tmp/image.jpg"
         coEvery { cameraRepository.takePicture() } returns bitmap
-        coEvery { processImageUseCase(any(), any()) } returns byteArray
+        coEvery { processImageUseCase(any(), any()) } returns imagePath
 
         viewModel.state.test {
             awaitItem() // Initial
@@ -83,6 +91,8 @@ class ScanningViewModelTest {
             val state = awaitItem()
             assertEquals(ScanStep.PRODUCT_PHOTO, state.step)
             assertEquals(1, state.scannedItems.size)
+            assertEquals(imagePath, state.scannedItems[0].productImagePath)
+            assertEquals(imagePath, state.scannedItems[0].dateImagePath)
         }
     }
 
@@ -90,9 +100,9 @@ class ScanningViewModelTest {
     fun `finishScanning emits Finished event with collected items`() = runTest {
         // Given
         val bitmap: Bitmap = mockk()
-        val byteArray = byteArrayOf(1, 2, 3)
+        val imagePath = "/tmp/image.jpg"
         coEvery { cameraRepository.takePicture() } returns bitmap
-        coEvery { processImageUseCase(any(), any()) } returns byteArray
+        coEvery { processImageUseCase(any(), any()) } returns imagePath
 
         viewModel.events.test {
             // Add one item
