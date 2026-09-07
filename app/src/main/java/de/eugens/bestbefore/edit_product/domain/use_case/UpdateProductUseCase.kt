@@ -1,4 +1,4 @@
-package de.eugens.bestbefore.products.domain.use_case
+package de.eugens.bestbefore.edit_product.domain.use_case
 
 import de.eugens.bestbefore.products.domain.model.Product
 import de.eugens.bestbefore.products.domain.repository.ProductRepository

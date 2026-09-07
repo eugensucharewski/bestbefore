@@ -15,6 +15,7 @@ import de.eugens.bestbefore.products.domain.model.ExpirationInfo
 import de.eugens.bestbefore.products.domain.model.Product
 import de.eugens.bestbefore.products.domain.model.ScannedItem
 import de.eugens.bestbefore.products.domain.repository.ProductRepository
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
@@ -181,7 +182,8 @@ class FirebaseProductRepository @Inject constructor(
                     return@withContext base64
                 }
             }
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
             // ignore
         }
 
@@ -196,7 +198,8 @@ class FirebaseProductRepository @Inject constructor(
                 saveBase64ToCacheFile(productId, base64)
                 return@withContext base64
             }
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
             // ignore
         }
 
@@ -217,7 +220,9 @@ class FirebaseProductRepository @Inject constructor(
                 for (doc in mediaDocs.documents) {
                     doc.reference.delete().await()
                 }
-            } catch (_: Exception) {}
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+            }
 
             db.collection(Constants.COLLECTION_PRODUCTS).document(productId).delete().await()
         }

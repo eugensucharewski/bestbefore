@@ -33,8 +33,9 @@ import de.eugens.bestbefore.auth.presentation.AuthIntent
 import de.eugens.bestbefore.auth.presentation.AuthScreen
 import de.eugens.bestbefore.auth.presentation.AuthState
 import de.eugens.bestbefore.auth.presentation.AuthViewModel
-import de.eugens.bestbefore.edit_product.EditProductScreen
-import de.eugens.bestbefore.edit_product.EditProductViewModel
+import de.eugens.bestbefore.edit_product.presentation.EditProductIntent
+import de.eugens.bestbefore.edit_product.presentation.EditProductScreen
+import de.eugens.bestbefore.edit_product.presentation.EditProductViewModel
 import de.eugens.bestbefore.settings.SettingsScreen
 import de.eugens.bestbefore.settings.SettingsViewModel
 import kotlinx.coroutines.flow.collectLatest
@@ -189,7 +190,9 @@ fun ProductsScreen(
                         entry<UiState.EditProduct> { uiState ->
                             val editProductViewModel: EditProductViewModel = hiltViewModel()
                             LaunchedEffect(uiState.product, uiState.imagePath) {
-                                editProductViewModel.setProduct(uiState.product, uiState.imagePath)
+                                editProductViewModel.onAction(
+                                    EditProductIntent.SetProduct(uiState.product, uiState.imagePath)
+                                )
                             }
                             EditProductScreen(
                                 viewModel = editProductViewModel,

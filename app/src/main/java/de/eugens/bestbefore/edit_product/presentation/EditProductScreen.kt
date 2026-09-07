@@ -1,4 +1,4 @@
-package de.eugens.bestbefore.edit_product
+package de.eugens.bestbefore.edit_product.presentation
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -9,8 +9,22 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -40,7 +54,7 @@ fun EditProductScreen(
             confirmButton = {
                 TextButton(
                     onClick = {
-                        viewModel.deleteProduct(onBack)
+                        viewModel.onAction(EditProductIntent.DeleteProduct(onBack))
                         showDeleteConfirm = false
                     },
                     colors = ButtonDefaults.textButtonColors(contentColor = Color.Red)
@@ -60,10 +74,10 @@ fun EditProductScreen(
         product = uiState.product,
         imagePath = uiState.imagePath,
         onBack = onBack,
-        onNameChange = viewModel::onNameChange,
-        onExpirationDateChange = viewModel::onExpirationDateChange,
+        onNameChange = { viewModel.onAction(EditProductIntent.ChangeName(it)) },
+        onExpirationDateChange = { viewModel.onAction(EditProductIntent.ChangeExpirationDate(it)) },
         onSave = {
-            viewModel.saveProduct(onBack)
+            viewModel.onAction(EditProductIntent.SaveProduct(onBack))
         },
         onDeleteClick = { showDeleteConfirm = true }
     )
