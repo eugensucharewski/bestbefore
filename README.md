@@ -3,6 +3,13 @@ BestBefore is an Android application designed to help you keep track of your pro
 <br>
 <br>
 <br>
+<img width="300" alt="Screenshot_20260907_033510" src="https://github.com/user-attachments/assets/c4b84b39-ca27-446d-891c-006256877569" />
+<img width="300" alt="Screenshot_20260907_033538" src="https://github.com/user-attachments/assets/c28fcb1a-5848-4540-9344-053e47ba034e" />
+<img width="300" alt="Screenshot_20260907_033601" src="https://github.com/user-attachments/assets/3ef12491-a4a5-4f17-9e4f-8cfde023b805" />
+
+<br>
+<br>
+<br>
 🚀 Features  
 
 • Product Management: Add and organize products with their names and expiration dates.  
