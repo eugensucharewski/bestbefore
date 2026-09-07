@@ -22,7 +22,6 @@ import de.eugens.bestbefore.products.domain.use_case.GetProductImageFileUseCase
 import de.eugens.bestbefore.products.domain.use_case.GetProductsUseCase
 import de.eugens.bestbefore.products.domain.use_case.SaveAnalysisResultsUseCase
 import de.eugens.bestbefore.products.domain.use_case.SortProductsUseCase
-import de.eugens.bestbefore.products.domain.use_case.UpdateProductUseCase
 import de.eugens.bestbefore.settings.domain.repository.SettingsRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -52,7 +51,6 @@ sealed class ProductIntent {
     data class AddProduct(val product: Product) : ProductIntent()
     data class SetFilter(val filter: ProductFilter) : ProductIntent()
     data class SelectProductForEdit(val product: Product) : ProductIntent()
-    data class UpdateProduct(val product: Product) : ProductIntent()
     data class ToggleSelection(val productId: String) : ProductIntent()
     data object ClearSelection : ProductIntent()
     data object DeleteSelectedProducts : ProductIntent()
@@ -88,7 +86,6 @@ data class ProductScreenState(
 class ProductViewModel @Inject constructor(
     private val getProductsUseCase: GetProductsUseCase,
     private val addProductUseCase: AddProductUseCase,
-    private val updateProductUseCase: UpdateProductUseCase,
     private val deleteProductUseCase: DeleteProductUseCase,
     private val analyzeImagesUseCase: AnalyzeImagesUseCase,
     private val saveAnalysisResultsUseCase: SaveAnalysisResultsUseCase,
@@ -211,7 +208,6 @@ class ProductViewModel @Inject constructor(
             is ProductIntent.AddProduct -> addProduct(intent.product)
             is ProductIntent.SetFilter -> _currentFilter.value = intent.filter
             is ProductIntent.SelectProductForEdit -> selectProductForEdit(intent.product)
-            is ProductIntent.UpdateProduct -> updateProduct(intent.product)
             is ProductIntent.ToggleSelection -> toggleSelection(intent.productId)
             is ProductIntent.ClearSelection -> _selectedProductIds.value = emptySet()
             is ProductIntent.DeleteSelectedProducts -> deleteSelectedProducts()
@@ -234,6 +230,7 @@ class ProductViewModel @Inject constructor(
                 val imagePath = getProductImageFileUseCase(productId)
                 _loadedImagePaths.value += (productId to imagePath)
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 Log.e(TAG, "loadImage failed for $productId", e)
                 _loadedImagePaths.value += (productId to null)
             } finally {
@@ -277,6 +274,7 @@ class ProductViewModel @Inject constructor(
             val imagePath = try {
                 getProductImageFileUseCase(product.id)
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 Log.e(TAG, "Failed to get image file for product ${product.id}", e)
                 null
             }
@@ -311,6 +309,7 @@ class ProductViewModel @Inject constructor(
                             imageMap[product.id] = path
                         }
                     } catch (e: Exception) {
+                        if (e is CancellationException) throw e
                         Log.e(TAG, "Failed to preload image for product ${product.id}", e)
                     }
                 }
@@ -392,20 +391,6 @@ class ProductViewModel @Inject constructor(
                 throw e
             } catch (e: Exception) {
                 Log.e(TAG, "addProduct failed", e)
-            }
-        }
-    }
-
-    private fun updateProduct(product: Product) {
-        viewModelScope.launch {
-            try {
-                updateProductUseCase(product)
-                refreshProducts()
-                backStack = listOf(UiState.MainList)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                Log.e(TAG, "updateProduct failed", e)
             }
         }
     }

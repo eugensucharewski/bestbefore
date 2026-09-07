@@ -8,6 +8,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import de.eugens.bestbefore.products.domain.model.ScannedItem
 import de.eugens.bestbefore.products.domain.repository.CameraRepository
 import de.eugens.bestbefore.products.domain.use_case.ProcessImageUseCase
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -61,6 +62,7 @@ class ScanningViewModel @Inject constructor(
                     capturePhoto(processedBitmap)
                 }
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 Log.e("ScanningViewModel", "Photo capture failed", e)
             }
         }

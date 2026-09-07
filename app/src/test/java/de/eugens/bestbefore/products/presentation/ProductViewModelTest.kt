@@ -21,7 +21,6 @@ import de.eugens.bestbefore.products.domain.use_case.GetProductsUseCase
 import de.eugens.bestbefore.products.domain.use_case.ParseExpirationDateUseCase
 import de.eugens.bestbefore.products.domain.use_case.SaveAnalysisResultsUseCase
 import de.eugens.bestbefore.products.domain.use_case.SortProductsUseCase
-import de.eugens.bestbefore.products.domain.use_case.UpdateProductUseCase
 import de.eugens.bestbefore.settings.domain.repository.SettingsRepository
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -48,7 +47,6 @@ class ProductViewModelTest {
     private lateinit var viewModel: ProductViewModel
     private val getProductsUseCase: GetProductsUseCase = mockk()
     private val addProductUseCase: AddProductUseCase = mockk()
-    private val updateProductUseCase: UpdateProductUseCase = mockk()
     private val deleteProductUseCase: DeleteProductUseCase = mockk()
     private val analyzeImagesUseCase: AnalyzeImagesUseCase = mockk()
     private val saveAnalysisResultsUseCase: SaveAnalysisResultsUseCase = mockk()
@@ -83,7 +81,6 @@ class ProductViewModelTest {
         viewModel = ProductViewModel(
             getProductsUseCase,
             addProductUseCase,
-            updateProductUseCase,
             deleteProductUseCase,
             analyzeImagesUseCase,
             saveAnalysisResultsUseCase,
@@ -409,6 +406,7 @@ class ProductViewModelTest {
             assertEquals(UiState.MainList, state.backStack.last())
             coVerify { analyzeImagesUseCase(items) }
             coVerify { saveAnalysisResultsUseCase(analysisResults, items) }
+            cancelAndIgnoreRemainingEvents()
         }
     }
 

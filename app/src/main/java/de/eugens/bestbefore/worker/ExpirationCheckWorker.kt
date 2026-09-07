@@ -19,6 +19,7 @@ import de.eugens.bestbefore.products.domain.model.Product
 import de.eugens.bestbefore.products.domain.repository.ProductRepository
 import de.eugens.bestbefore.products.domain.use_case.ParseExpirationDateUseCase
 import de.eugens.bestbefore.settings.domain.repository.SettingsRepository
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
@@ -57,6 +58,7 @@ class ExpirationCheckWorker @AssistedInject constructor(
 
             Result.success()
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             Log.e(TAG, "ExpirationCheckWorker failed", e)
             Result.retry()
         }
