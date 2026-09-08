@@ -14,6 +14,7 @@ import de.eugens.bestbefore.products.domain.model.Product
 import de.eugens.bestbefore.products.domain.model.ScannedItem
 import de.eugens.bestbefore.products.domain.use_case.AddProductUseCase
 import de.eugens.bestbefore.products.domain.use_case.AnalyzeImagesUseCase
+import de.eugens.bestbefore.products.domain.use_case.ClearTempScanFilesUseCase
 import de.eugens.bestbefore.products.domain.use_case.DeleteProductUseCase
 import de.eugens.bestbefore.products.domain.use_case.FilterProductsUseCase
 import de.eugens.bestbefore.products.domain.use_case.FormatExpirationDateUseCase
@@ -89,6 +90,7 @@ class ProductViewModel @Inject constructor(
     private val deleteProductUseCase: DeleteProductUseCase,
     private val analyzeImagesUseCase: AnalyzeImagesUseCase,
     private val saveAnalysisResultsUseCase: SaveAnalysisResultsUseCase,
+    private val clearTempScanFilesUseCase: ClearTempScanFilesUseCase,
     private val getProductImageFileUseCase: GetProductImageFileUseCase,
     private val getExpirationStatusUseCase: GetExpirationStatusUseCase,
     private val filterProductsUseCase: FilterProductsUseCase,
@@ -365,6 +367,8 @@ class ProductViewModel @Inject constructor(
             } catch (e: Exception) {
                 Log.e(TAG, "processItems failed", e)
                 backStack = backStack + UiState.Error(e.localizedMessage ?: "Analysis failed")
+            } finally {
+                clearTempScanFilesUseCase(items)
             }
         }
     }

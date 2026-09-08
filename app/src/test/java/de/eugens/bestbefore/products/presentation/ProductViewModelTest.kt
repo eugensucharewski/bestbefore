@@ -12,6 +12,7 @@ import de.eugens.bestbefore.products.domain.model.Product
 import de.eugens.bestbefore.products.domain.model.ScannedItem
 import de.eugens.bestbefore.products.domain.use_case.AddProductUseCase
 import de.eugens.bestbefore.products.domain.use_case.AnalyzeImagesUseCase
+import de.eugens.bestbefore.products.domain.use_case.ClearTempScanFilesUseCase
 import de.eugens.bestbefore.products.domain.use_case.DeleteProductUseCase
 import de.eugens.bestbefore.products.domain.use_case.FilterProductsUseCase
 import de.eugens.bestbefore.products.domain.use_case.FormatExpirationDateUseCase
@@ -50,6 +51,7 @@ class ProductViewModelTest {
     private val deleteProductUseCase: DeleteProductUseCase = mockk()
     private val analyzeImagesUseCase: AnalyzeImagesUseCase = mockk()
     private val saveAnalysisResultsUseCase: SaveAnalysisResultsUseCase = mockk()
+    private val clearTempScanFilesUseCase: ClearTempScanFilesUseCase = mockk(relaxed = true)
     private val getProductImageFileUseCase: GetProductImageFileUseCase = mockk()
     private val settingsRepository: SettingsRepository = mockk()
     private val authRepository: FirebaseAuthRepository = mockk()
@@ -84,6 +86,7 @@ class ProductViewModelTest {
             deleteProductUseCase,
             analyzeImagesUseCase,
             saveAnalysisResultsUseCase,
+            clearTempScanFilesUseCase,
             getProductImageFileUseCase,
             getExpirationStatusUseCase,
             filterProductsUseCase,
@@ -406,6 +409,7 @@ class ProductViewModelTest {
             assertEquals(UiState.MainList, state.backStack.last())
             coVerify { analyzeImagesUseCase(items) }
             coVerify { saveAnalysisResultsUseCase(analysisResults, items) }
+            coVerify { clearTempScanFilesUseCase(items) }
             cancelAndIgnoreRemainingEvents()
         }
     }

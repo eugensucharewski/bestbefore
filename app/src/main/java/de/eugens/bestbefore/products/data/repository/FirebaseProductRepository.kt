@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.util.Base64
+import android.util.Log
 import androidx.core.graphics.scale
 import com.google.firebase.Firebase
 import com.google.firebase.auth.auth
@@ -81,6 +82,7 @@ class FirebaseProductRepository @Inject constructor(
             cacheFile.writeBytes(bytes)
             cacheFile
         } catch (e: Exception) {
+            Log.w("FirebaseProductRepository", "Failed to save image to cache: ${e.message}")
             null
         }
     }
@@ -301,10 +303,9 @@ class FirebaseProductRepository @Inject constructor(
         withContext(Dispatchers.IO) {
             val currentUser = auth.currentUser
             results.forEachIndexed { index, info ->
-                val productByteArray = items.getOrNull(index)?.productBitmap
-                val encodedImage = productByteArray?.let {
-                    val bitmap = BitmapFactory.decodeByteArray(it, 0, it.size)
-                    resizeAndEncodeBitmap(bitmap)
+                val imagePath = items.getOrNull(index)?.productImagePath
+                val encodedImage = imagePath?.let { path ->
+                    encodeImageFileToBase64(path)
                 }
                 val hasImage = !encodedImage.isNullOrEmpty()
 
@@ -329,15 +330,71 @@ class FirebaseProductRepository @Inject constructor(
         }
     }
 
-    private fun resizeAndEncodeBitmap(bitmap: Bitmap): String {
-        val ratio =
-            (Constants.BITMAP_MAX_WIDTH.toFloat() / bitmap.width).coerceAtMost(Constants.BITMAP_MAX_HEIGHT.toFloat() / bitmap.height)
-        val width = (ratio * bitmap.width).toInt()
-        val height = (ratio * bitmap.height).toInt()
+    private fun encodeImageFileToBase64(path: String): String? {
+        val file = File(path)
+        if (!file.exists()) return null
 
-        val resized = bitmap.scale(width, height)
-        val outputStream = ByteArrayOutputStream()
-        resized.compress(Bitmap.CompressFormat.JPEG, Constants.BITMAP_QUALITY, outputStream)
-        return Base64.encodeToString(outputStream.toByteArray(), Base64.DEFAULT)
+        val reqWidth = Constants.BITMAP_MAX_WIDTH
+        val reqHeight = Constants.BITMAP_MAX_HEIGHT
+
+        // 1. Read bounds first to calculate inSampleSize without loading the full image into RAM
+        val options = BitmapFactory.Options().apply {
+            inJustDecodeBounds = true
+        }
+        BitmapFactory.decodeFile(path, options)
+
+        if (options.outWidth <= 0 || options.outHeight <= 0) return null
+
+        options.inSampleSize = calculateInSampleSize(options, reqWidth, reqHeight)
+        options.inJustDecodeBounds = false
+
+        // 2. Decode subsampled bitmap
+        val subsampledBitmap = BitmapFactory.decodeFile(path, options) ?: return null
+
+        // 3. Scale down to exact bounds if necessary
+        val ratio = (reqWidth.toFloat() / subsampledBitmap.width)
+            .coerceAtMost(reqHeight.toFloat() / subsampledBitmap.height)
+        val targetWidth = (ratio * subsampledBitmap.width).toInt().coerceAtLeast(1)
+        val targetHeight = (ratio * subsampledBitmap.height).toInt().coerceAtLeast(1)
+
+        val finalBitmap = if (targetWidth < subsampledBitmap.width || targetHeight < subsampledBitmap.height) {
+            subsampledBitmap.scale(targetWidth, targetHeight)
+        } else {
+            subsampledBitmap
+        }
+
+        return try {
+            val outputStream = ByteArrayOutputStream()
+            finalBitmap.compress(Bitmap.CompressFormat.JPEG, Constants.BITMAP_QUALITY, outputStream)
+            Base64.encodeToString(outputStream.toByteArray(), Base64.DEFAULT)
+        } finally {
+            if (finalBitmap != subsampledBitmap && !subsampledBitmap.isRecycled) {
+                subsampledBitmap.recycle()
+            }
+            if (!finalBitmap.isRecycled) {
+                finalBitmap.recycle()
+            }
+        }
+    }
+
+    private fun calculateInSampleSize(
+        options: BitmapFactory.Options,
+        reqWidth: Int,
+        reqHeight: Int
+    ): Int {
+        val height = options.outHeight
+        val width = options.outWidth
+        var inSampleSize = 1
+
+        if (height > reqHeight || width > reqWidth) {
+            val halfHeight = height / 2
+            val halfWidth = width / 2
+
+            while (halfHeight / inSampleSize >= reqHeight && halfWidth / inSampleSize >= reqWidth) {
+                inSampleSize *= 2
+            }
+        }
+
+        return inSampleSize
     }
 }
