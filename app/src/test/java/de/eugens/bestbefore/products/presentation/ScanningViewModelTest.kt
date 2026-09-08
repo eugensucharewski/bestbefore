@@ -4,12 +4,14 @@ import android.graphics.Bitmap
 import app.cash.turbine.test
 import de.eugens.bestbefore.MainDispatcherRule
 import de.eugens.bestbefore.products.domain.repository.CameraRepository
+import de.eugens.bestbefore.products.domain.use_case.ClearTempScanFilesUseCase
 import de.eugens.bestbefore.products.domain.use_case.ProcessImageUseCase
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runTest
+import org.junit.Assert
 import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Rule
@@ -24,11 +26,17 @@ class ScanningViewModelTest {
     private lateinit var viewModel: ScanningViewModel
     private val cameraRepository: CameraRepository = mockk()
     private val processImageUseCase: ProcessImageUseCase = mockk()
+    private val clearTempScanFilesUseCase: ClearTempScanFilesUseCase = mockk(relaxed = true)
 
     @Before
     fun setUp() {
         every { cameraRepository.getController() } returns mockk()
-        viewModel = ScanningViewModel(cameraRepository, processImageUseCase, mainDispatcherRule.testDispatcher)
+        viewModel = ScanningViewModel(
+            cameraRepository,
+            processImageUseCase,
+            clearTempScanFilesUseCase,
+            mainDispatcherRule.testDispatcher
+        )
     }
 
     @Test
@@ -43,12 +51,9 @@ class ScanningViewModelTest {
     fun `capture photo transitions from product to date step`() = runTest {
         // Given
         val bitmap: Bitmap = mockk()
-        val processedBitmap: Bitmap = mockk()
+        val imagePath = "/tmp/image.jpg"
         coEvery { cameraRepository.takePicture() } returns bitmap
-        coEvery { processImageUseCase(bitmap, ScanStep.PRODUCT_PHOTO) } returns processedBitmap
-        
-        // Mock bitmap compression
-        every { processedBitmap.compress(any(), any(), any()) } returns true
+        coEvery { processImageUseCase(bitmap, ScanStep.PRODUCT_PHOTO) } returns imagePath
 
         viewModel.state.test {
             awaitItem() // Initial state
@@ -59,7 +64,8 @@ class ScanningViewModelTest {
             // Then
             val state = awaitItem()
             assertEquals(ScanStep.DATE_PHOTO, state.step)
-            org.junit.Assert.assertNotNull(state.currentItem.productBitmap)
+            Assert.assertNotNull(state.currentItem.productImagePath)
+            assertEquals(imagePath, state.currentItem.productImagePath)
         }
     }
 
@@ -67,10 +73,9 @@ class ScanningViewModelTest {
     fun `capture second photo adds item and returns to product step`() = runTest {
         // Given
         val bitmap: Bitmap = mockk()
-        val processedBitmap: Bitmap = mockk()
+        val imagePath = "/tmp/image.jpg"
         coEvery { cameraRepository.takePicture() } returns bitmap
-        coEvery { processImageUseCase(any(), any()) } returns processedBitmap
-        every { processedBitmap.compress(any(), any(), any()) } returns true
+        coEvery { processImageUseCase(any(), any()) } returns imagePath
 
         viewModel.state.test {
             awaitItem() // Initial
@@ -86,6 +91,8 @@ class ScanningViewModelTest {
             val state = awaitItem()
             assertEquals(ScanStep.PRODUCT_PHOTO, state.step)
             assertEquals(1, state.scannedItems.size)
+            assertEquals(imagePath, state.scannedItems[0].productImagePath)
+            assertEquals(imagePath, state.scannedItems[0].dateImagePath)
         }
     }
 
@@ -93,10 +100,9 @@ class ScanningViewModelTest {
     fun `finishScanning emits Finished event with collected items`() = runTest {
         // Given
         val bitmap: Bitmap = mockk()
-        val processedBitmap: Bitmap = mockk()
+        val imagePath = "/tmp/image.jpg"
         coEvery { cameraRepository.takePicture() } returns bitmap
-        coEvery { processImageUseCase(any(), any()) } returns processedBitmap
-        every { processedBitmap.compress(any(), any(), any()) } returns true
+        coEvery { processImageUseCase(any(), any()) } returns imagePath
 
         viewModel.events.test {
             // Add one item
@@ -119,6 +125,6 @@ class ScanningViewModelTest {
     }
 
     private fun assertTrue(condition: Boolean) {
-        org.junit.Assert.assertTrue(condition)
+        Assert.assertTrue(condition)
     }
 }

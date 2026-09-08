@@ -13,6 +13,7 @@ import de.eugens.bestbefore.products.domain.model.ScannedItem
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
+import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -50,18 +51,24 @@ class GeminiProductAnalyzer @Inject constructor() : AIProductAnalyzer {
                 val response = generativeModel.generateContent(
                     content {
                         items.forEach { item ->
-                            item.productBitmap?.let {
-                                val bitmap = BitmapFactory.decodeByteArray(it, 0, it.size)
-                                if (bitmap != null) {
-                                    decodedBitmaps.add(bitmap)
-                                    image(bitmap)
+                            item.productImagePath?.let { path ->
+                                val file = File(path)
+                                if (file.exists()) {
+                                    val bitmap = BitmapFactory.decodeFile(path)
+                                    if (bitmap != null) {
+                                        decodedBitmaps.add(bitmap)
+                                        image(bitmap)
+                                    }
                                 }
                             }
-                            item.dateBitmap?.let {
-                                val bitmap = BitmapFactory.decodeByteArray(it, 0, it.size)
-                                if (bitmap != null) {
-                                    decodedBitmaps.add(bitmap)
-                                    image(bitmap)
+                            item.dateImagePath?.let { path ->
+                                val file = File(path)
+                                if (file.exists()) {
+                                    val bitmap = BitmapFactory.decodeFile(path)
+                                    if (bitmap != null) {
+                                        decodedBitmaps.add(bitmap)
+                                        image(bitmap)
+                                    }
                                 }
                             }
                         }

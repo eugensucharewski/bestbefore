@@ -1,23 +1,26 @@
 package de.eugens.bestbefore.products.presentation
 
-import de.eugens.bestbefore.products.domain.model.Product
-import de.eugens.bestbefore.products.domain.model.ScannedItem
-import kotlinx.serialization.Serializable
+import android.os.Parcelable
 import androidx.navigation3.runtime.NavKey
+import de.eugens.bestbefore.products.domain.model.Product
+import de.eugens.bestbefore.products.domain.model.ScanStep
+import de.eugens.bestbefore.products.domain.model.ScannedItem
+import kotlinx.parcelize.Parcelize
+import kotlinx.serialization.Serializable
 
-@Serializable
-enum class ProductFilter {
+@Parcelize
+enum class ProductFilter : Parcelable {
     ALL,
     EXPIRED,
     EXPIRED_AND_UPCOMING
 }
 
-@Serializable
-sealed interface UiState : NavKey {
+@Parcelize
+sealed interface UiState : NavKey, Parcelable {
     @Serializable
     data object MainList : UiState
     
-    @Serializable
+    @Parcelize
     data class Scanning(
         val step: ScanStep,
         val currentItem: ScannedItem = ScannedItem(),
@@ -25,18 +28,18 @@ sealed interface UiState : NavKey {
         val scanId: String = ""
     ) : UiState
     
-    @Serializable
+    @Parcelize
     data object Processing : UiState
     
-    @Serializable
+    @Parcelize
     data object Settings : UiState
 
-    @Serializable
+    @Parcelize
     data class EditProduct(val product: Product, val imagePath: String? = null) : UiState
     
-    @Serializable
+    @Parcelize
     data class Success(val products: List<Product>) : UiState
     
-    @Serializable
+    @Parcelize
     data class Error(val errorMessage: String) : UiState
 }

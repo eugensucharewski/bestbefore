@@ -1,9 +1,10 @@
 package de.eugens.bestbefore.products.domain.model
 
-import kotlinx.serialization.Serializable
+import android.os.Parcelable
+import kotlinx.parcelize.Parcelize
 
-@Serializable
-enum class ScanStep {
+@Parcelize
+enum class ScanStep : Parcelable {
     PRODUCT_PHOTO,
     DATE_PHOTO
 }

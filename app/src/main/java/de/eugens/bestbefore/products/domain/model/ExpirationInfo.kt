@@ -1,8 +1,11 @@
 package de.eugens.bestbefore.products.domain.model
 
+import android.os.Parcelable
+import kotlinx.parcelize.Parcelize
 import kotlinx.serialization.Serializable
 
 @Serializable
+@Parcelize
 data class ExpirationInfo(
     val productName: String? = null,
     val date_found: Boolean = false,
@@ -10,4 +13,4 @@ data class ExpirationInfo(
     val production_date: String? = null,
     val confidence: String? = null,
     val raw_text_detected: String? = null
-)
+): Parcelable
