@@ -1,8 +1,9 @@
 package de.eugens.bestbefore.products.domain.model
 
-import kotlinx.serialization.Serializable
+import android.os.Parcelable
+import kotlinx.parcelize.Parcelize
 
-@Serializable
+@Parcelize
 data class Product(
     val id: String = "",
     val name: String = "",
@@ -13,10 +14,10 @@ data class Product(
     val productImage: String? = null, // Base64 encoded resized image
     val hasImage: Boolean = false,
     val userId: String? = null
-)
+) : Parcelable
 
-@Serializable
+@Parcelize
 data class ScannedItem(
     val productImagePath: String? = null,
     val dateImagePath: String? = null
-)
+) : Parcelable
