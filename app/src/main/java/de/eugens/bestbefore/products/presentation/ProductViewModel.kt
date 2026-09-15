@@ -35,6 +35,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.util.UUID
 import javax.inject.Inject
@@ -115,12 +116,6 @@ class ProductViewModel @Inject constructor(
             savedStateHandle[BACKSTACK_KEY] = value
         }
 
-    private val _products = MutableStateFlow<List<Product>>(emptyList())
-    private val _currentFilter = MutableStateFlow(ProductFilter.ALL)
-    private val _productToDelete = MutableStateFlow<Product?>(null)
-    private val _selectedProductIds = MutableStateFlow<Set<String>>(emptySet())
-    private val _isLoading = MutableStateFlow(false)
-
     private val threshold = settingsRepository.getExpirationThresholdFlow()
         .stateIn(
             viewModelScope,
@@ -128,39 +123,34 @@ class ProductViewModel @Inject constructor(
             Constants.UPCOMING_EXPIRATION_DAYS_THRESHOLD
         )
 
-    private val _loadedImagePaths = MutableStateFlow<Map<String, String?>>(emptyMap())
+    private data class InternalState(
+        val products: List<Product> = emptyList(),
+        val currentFilter: ProductFilter = ProductFilter.ALL,
+        val productToDelete: Product? = null,
+        val selectedProductIds: Set<String> = emptySet(),
+        val isLoading: Boolean = false,
+        val loadedImagePaths: Map<String, String?> = emptyMap()
+    )
 
-    @Suppress("UNCHECKED_CAST")
+    private val _internalState = MutableStateFlow(InternalState())
+
     val state: StateFlow<ProductScreenState> = combine(
+        _internalState,
         _backStack,
-        _products,
-        _currentFilter,
-        _productToDelete,
-        _selectedProductIds,
-        _isLoading,
         threshold,
-        _loadedImagePaths,
         authRepository.observeAuthState().onStart {
-            emit(authRepository.currentUserEmail?.let { AuthState.Authenticated(it) }
-                ?: AuthState.Unauthenticated)
+            emit(
+                authRepository.currentUserEmail?.let { AuthState.Authenticated(it) }
+                    ?: AuthState.Unauthenticated
+            )
         }
-    ) { args ->
-        val backStack = args[0] as List<UiState>
-        val products = args[1] as List<Product>
-        val filter = args[2] as ProductFilter
-        val productToDelete = args[3] as? Product
-        val selectedProductIds = args[4] as Set<String>
-        val isLoading = args[5] as Boolean
-        val thresholdValue = args[6] as Int
-        val loadedImagePaths = args[7] as Map<String, String?>
-        val authState = args[8] as AuthState
-
-        val filtered = filterProductsUseCase(products, filter, thresholdValue)
+    ) { internal, backStack, thresholdValue, authState ->
+        val filtered = filterProductsUseCase(internal.products, internal.currentFilter, thresholdValue)
         val uiModels = sortProductsUseCase(filtered).map { product ->
             ProductUiModel(
                 product = product,
                 status = getExpirationStatusUseCase(product, thresholdValue),
-                imagePath = loadedImagePaths[product.id],
+                imagePath = internal.loadedImagePaths[product.id],
                 formattedExpirationDate = formatExpirationDateUseCase(product.expirationDate),
                 formattedProductionDate = product.productionDate?.let { formatExpirationDateUseCase(it) }
             )
@@ -168,12 +158,12 @@ class ProductViewModel @Inject constructor(
         ProductScreenState(
             uiState = backStack.lastOrNull() ?: UiState.MainList,
             products = uiModels,
-            currentFilter = filter,
+            currentFilter = internal.currentFilter,
             authState = authState,
             backStack = backStack,
-            productToDelete = productToDelete,
-            selectedProductIds = selectedProductIds,
-            isLoading = isLoading
+            productToDelete = internal.productToDelete,
+            selectedProductIds = internal.selectedProductIds,
+            isLoading = internal.isLoading
         )
     }
         .flowOn(Dispatchers.Default)
@@ -200,18 +190,18 @@ class ProductViewModel @Inject constructor(
             is ProductIntent.FinishScanning -> { /* handled by scanning session flow */
             }
 
-            is ProductIntent.DeleteProduct -> _productToDelete.value = intent.product
+            is ProductIntent.DeleteProduct -> _internalState.update { it.copy(productToDelete = intent.product) }
             is ProductIntent.ConfirmDelete -> {
-                _productToDelete.value?.let { deleteProduct(it.id) }
-                _productToDelete.value = null
+                _internalState.value.productToDelete?.let { deleteProduct(it.id) }
+                _internalState.update { it.copy(productToDelete = null) }
             }
 
-            is ProductIntent.DismissDelete -> _productToDelete.value = null
+            is ProductIntent.DismissDelete -> _internalState.update { it.copy(productToDelete = null) }
             is ProductIntent.AddProduct -> addProduct(intent.product)
-            is ProductIntent.SetFilter -> _currentFilter.value = intent.filter
+            is ProductIntent.SetFilter -> _internalState.update { it.copy(currentFilter = intent.filter) }
             is ProductIntent.SelectProductForEdit -> selectProductForEdit(intent.product)
             is ProductIntent.ToggleSelection -> toggleSelection(intent.productId)
-            is ProductIntent.ClearSelection -> _selectedProductIds.value = emptySet()
+            is ProductIntent.ClearSelection -> _internalState.update { it.copy(selectedProductIds = emptySet()) }
             is ProductIntent.DeleteSelectedProducts -> deleteSelectedProducts()
             is ProductIntent.BackFromError -> backFromError()
             is ProductIntent.LoadImage -> loadImage(intent.productId)
@@ -222,7 +212,7 @@ class ProductViewModel @Inject constructor(
 
     private fun loadImage(productId: String) {
         synchronized(loadingProductIds) {
-            if (_loadedImagePaths.value.containsKey(productId) || !loadingProductIds.add(productId)) {
+            if (_internalState.value.loadedImagePaths.containsKey(productId) || !loadingProductIds.add(productId)) {
                 return
             }
         }
@@ -230,11 +220,11 @@ class ProductViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val imagePath = getProductImageFileUseCase(productId)
-                _loadedImagePaths.value += (productId to imagePath)
+                _internalState.update { it.copy(loadedImagePaths = it.loadedImagePaths + (productId to imagePath)) }
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
                 Log.e(TAG, "loadImage failed for $productId", e)
-                _loadedImagePaths.value += (productId to null)
+                _internalState.update { it.copy(loadedImagePaths = it.loadedImagePaths + (productId to null)) }
             } finally {
                 synchronized(loadingProductIds) {
                     loadingProductIds.remove(productId)
@@ -244,16 +234,19 @@ class ProductViewModel @Inject constructor(
     }
 
     private fun toggleSelection(productId: String) {
-        val current = _selectedProductIds.value
-        _selectedProductIds.value = if (current.contains(productId)) {
-            current - productId
-        } else {
-            current + productId
+        _internalState.update { state ->
+            val current = state.selectedProductIds
+            val newSelection = if (current.contains(productId)) {
+                current - productId
+            } else {
+                current + productId
+            }
+            state.copy(selectedProductIds = newSelection)
         }
     }
 
     private fun deleteSelectedProducts() {
-        val idsToDelete = _selectedProductIds.value
+        val idsToDelete = _internalState.value.selectedProductIds
         if (idsToDelete.isEmpty()) return
 
         viewModelScope.launch {
@@ -261,7 +254,7 @@ class ProductViewModel @Inject constructor(
                 idsToDelete.forEach { id ->
                     deleteProductUseCase(id)
                 }
-                _selectedProductIds.value = emptySet()
+                _internalState.update { it.copy(selectedProductIds = emptySet()) }
                 refreshProducts()
             } catch (e: CancellationException) {
                 throw e
@@ -299,7 +292,7 @@ class ProductViewModel @Inject constructor(
     }
 
     private suspend fun refreshProducts() {
-        _isLoading.value = true
+        _internalState.update { it.copy(isLoading = true) }
         try {
             val products = getProductsUseCase()
             val imageMap = mutableMapOf<String, String?>()
@@ -316,12 +309,16 @@ class ProductViewModel @Inject constructor(
                     }
                 }
             }
-            if (imageMap.isNotEmpty()) {
-                _loadedImagePaths.value += imageMap
+            _internalState.update {
+                it.copy(
+                    products = products,
+                    loadedImagePaths = if (imageMap.isNotEmpty()) it.loadedImagePaths + imageMap else it.loadedImagePaths,
+                    isLoading = false
+                )
             }
-            _products.value = products
-        } finally {
-            _isLoading.value = false
+        } catch (e: Exception) {
+            _internalState.update { it.copy(isLoading = false) }
+            throw e
         }
     }
 
