@@ -6,10 +6,12 @@ import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import de.eugens.bestbefore.auth.data.repository.FirebaseAuthRepository
 import de.eugens.bestbefore.auth.domain.repository.AuthRepository
+import de.eugens.bestbefore.products.data.analyzer.FallbackProductAnalyzer
+import de.eugens.bestbefore.products.data.analyzer.GoogleMlKitTextRecognizer
 import de.eugens.bestbefore.products.data.repository.CameraXRepository
 import de.eugens.bestbefore.products.data.repository.FirebaseProductRepository
-import de.eugens.bestbefore.products.data.analyzer.GeminiProductAnalyzer
 import de.eugens.bestbefore.products.domain.analyzer.AIProductAnalyzer
+import de.eugens.bestbefore.products.domain.analyzer.ImageTextRecognizer
 import de.eugens.bestbefore.products.domain.repository.CameraRepository
 import de.eugens.bestbefore.products.domain.repository.ProductRepository
 import de.eugens.bestbefore.settings.data.DataStoreSettingsRepository
@@ -41,8 +43,14 @@ abstract class RepositoryModule {
     @Binds
     @Singleton
     abstract fun bindAIProductAnalyzer(
-        geminiProductAnalyzerImpl: GeminiProductAnalyzer
+        fallbackProductAnalyzer: FallbackProductAnalyzer
     ): AIProductAnalyzer
+
+    @Binds
+    @Singleton
+    abstract fun bindImageTextRecognizer(
+        googleMlKitTextRecognizerImpl: GoogleMlKitTextRecognizer
+    ): ImageTextRecognizer
 
     @Binds
     @Singleton
