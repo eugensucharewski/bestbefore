@@ -1,5 +1,6 @@
 package de.eugens.bestbefore.edit_product.presentation
 
+import app.cash.turbine.test
 import de.eugens.bestbefore.MainDispatcherRule
 import de.eugens.bestbefore.edit_product.domain.use_case.UpdateProductUseCase
 import de.eugens.bestbefore.products.domain.model.Product
@@ -78,19 +79,20 @@ class EditProductViewModelTest {
     }
 
     @Test
-    fun `saveProduct calls updateProductUseCase and onSuccess`() = runTest {
+    fun `saveProduct calls updateProductUseCase and emits ProductSaved event`() = runTest {
         // Given
         val product = Product(id = "1", name = "Updated Product")
         viewModel.onAction(EditProductIntent.SetProduct(product))
         coEvery { updateProductUseCase(any()) } returns Unit
-        var successCalled = false
-        
-        // When
-        viewModel.onAction(EditProductIntent.SaveProduct { successCalled = true })
-        
-        // Then
-        coVerify { updateProductUseCase(product) }
-        assertEquals(true, successCalled)
+
+        viewModel.events.test {
+            // When
+            viewModel.onAction(EditProductIntent.SaveProduct)
+
+            // Then
+            assertEquals(EditProductEvent.ProductSaved, awaitItem())
+            coVerify { updateProductUseCase(product) }
+        }
     }
 
     @Test
@@ -102,25 +104,26 @@ class EditProductViewModelTest {
         coEvery { updateProductUseCase(any()) } throws Exception(errorMessage)
         
         // When
-        viewModel.onAction(EditProductIntent.SaveProduct { })
+        viewModel.onAction(EditProductIntent.SaveProduct)
         
         // Then
         assertEquals(errorMessage, viewModel.uiState.value.error)
     }
 
     @Test
-    fun `deleteProduct calls deleteProductUseCase and onSuccess`() = runTest {
+    fun `deleteProduct calls deleteProductUseCase and emits ProductDeleted event`() = runTest {
         // Given
         val product = Product(id = "1", name = "Product to delete")
         viewModel.onAction(EditProductIntent.SetProduct(product))
         coEvery { deleteProductUseCase(any()) } returns Unit
-        var successCalled = false
 
-        // When
-        viewModel.onAction(EditProductIntent.DeleteProduct { successCalled = true })
+        viewModel.events.test {
+            // When
+            viewModel.onAction(EditProductIntent.DeleteProduct)
 
-        // Then
-        coVerify { deleteProductUseCase("1") }
-        assertEquals(true, successCalled)
+            // Then
+            assertEquals(EditProductEvent.ProductDeleted, awaitItem())
+            coVerify { deleteProductUseCase("1") }
+        }
     }
 }

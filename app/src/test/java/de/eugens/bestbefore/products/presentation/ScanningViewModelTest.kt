@@ -1,13 +1,9 @@
 package de.eugens.bestbefore.products.presentation
 
-import android.graphics.Bitmap
 import app.cash.turbine.test
 import de.eugens.bestbefore.MainDispatcherRule
-import de.eugens.bestbefore.products.domain.repository.CameraRepository
-import de.eugens.bestbefore.products.domain.use_case.ClearTempScanFilesUseCase
-import de.eugens.bestbefore.products.domain.use_case.ProcessImageUseCase
+import de.eugens.bestbefore.products.domain.repository.ImageRepository
 import io.mockk.coEvery
-import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runTest
@@ -24,17 +20,12 @@ class ScanningViewModelTest {
     val mainDispatcherRule = MainDispatcherRule()
 
     private lateinit var viewModel: ScanningViewModel
-    private val cameraRepository: CameraRepository = mockk()
-    private val processImageUseCase: ProcessImageUseCase = mockk()
-    private val clearTempScanFilesUseCase: ClearTempScanFilesUseCase = mockk(relaxed = true)
+    private val imageRepository: ImageRepository = mockk(relaxed = true)
 
     @Before
     fun setUp() {
-        every { cameraRepository.getController() } returns mockk()
         viewModel = ScanningViewModel(
-            cameraRepository,
-            processImageUseCase,
-            clearTempScanFilesUseCase,
+            imageRepository,
             mainDispatcherRule.testDispatcher
         )
     }
@@ -50,16 +41,15 @@ class ScanningViewModelTest {
     @Test
     fun `capture photo transitions from product to date step`() = runTest {
         // Given
-        val bitmap: Bitmap = mockk()
+        val imageBytes = byteArrayOf(1, 2, 3)
         val imagePath = "/tmp/image.jpg"
-        coEvery { cameraRepository.takePicture() } returns bitmap
-        coEvery { processImageUseCase(bitmap, ScanStep.PRODUCT_PHOTO) } returns imagePath
+        coEvery { imageRepository.processImage(any(), ScanStep.PRODUCT_PHOTO, any()) } returns imagePath
 
         viewModel.state.test {
             awaitItem() // Initial state
             
             // When
-            viewModel.onAction(ScanningIntent.RequestCapture)
+            viewModel.onAction(ScanningIntent.PhotoCaptured(imageBytes, 0))
             
             // Then
             val state = awaitItem()
@@ -72,20 +62,19 @@ class ScanningViewModelTest {
     @Test
     fun `capture second photo adds item and returns to product step`() = runTest {
         // Given
-        val bitmap: Bitmap = mockk()
+        val imageBytes = byteArrayOf(1, 2, 3)
         val imagePath = "/tmp/image.jpg"
-        coEvery { cameraRepository.takePicture() } returns bitmap
-        coEvery { processImageUseCase(any(), any()) } returns imagePath
+        coEvery { imageRepository.processImage(any(), any(), any()) } returns imagePath
 
         viewModel.state.test {
             awaitItem() // Initial
             
             // First capture (Product)
-            viewModel.onAction(ScanningIntent.RequestCapture)
+            viewModel.onAction(ScanningIntent.PhotoCaptured(imageBytes, 0))
             awaitItem() // Skip to Date step
             
             // Second capture (Date)
-            viewModel.onAction(ScanningIntent.RequestCapture)
+            viewModel.onAction(ScanningIntent.PhotoCaptured(imageBytes, 0))
             
             // Then
             val state = awaitItem()
@@ -99,15 +88,14 @@ class ScanningViewModelTest {
     @Test
     fun `finishScanning emits Finished event with collected items`() = runTest {
         // Given
-        val bitmap: Bitmap = mockk()
+        val imageBytes = byteArrayOf(1, 2, 3)
         val imagePath = "/tmp/image.jpg"
-        coEvery { cameraRepository.takePicture() } returns bitmap
-        coEvery { processImageUseCase(any(), any()) } returns imagePath
+        coEvery { imageRepository.processImage(any(), any(), any()) } returns imagePath
 
         viewModel.events.test {
             // Add one item
-            viewModel.onAction(ScanningIntent.RequestCapture)
-            viewModel.onAction(ScanningIntent.RequestCapture)
+            viewModel.onAction(ScanningIntent.PhotoCaptured(imageBytes, 0))
+            viewModel.onAction(ScanningIntent.PhotoCaptured(imageBytes, 0))
             
             // When
             viewModel.onAction(ScanningIntent.FinishScanning)

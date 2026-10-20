@@ -5,9 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import de.eugens.bestbefore.products.domain.model.ScannedItem
-import de.eugens.bestbefore.products.domain.repository.CameraRepository
-import de.eugens.bestbefore.products.domain.use_case.ClearTempScanFilesUseCase
-import de.eugens.bestbefore.products.domain.use_case.ProcessImageUseCase
+import de.eugens.bestbefore.products.domain.repository.ImageRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -15,14 +13,36 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 sealed class ScanningIntent {
-    data object RequestCapture : ScanningIntent()
+    data class PhotoCaptured(
+        val imageBytes: ByteArray,
+        val rotationDegrees: Int
+    ) : ScanningIntent() {
+        override fun equals(other: Any?): Boolean {
+            if (this === other) return true
+            if (javaClass != other?.javaClass) return false
+
+            other as PhotoCaptured
+
+            if (rotationDegrees != other.rotationDegrees) return false
+            if (!imageBytes.contentEquals(other.imageBytes)) return false
+
+            return true
+        }
+
+        override fun hashCode(): Int {
+            var result = rotationDegrees
+            result = 31 * result + imageBytes.contentHashCode()
+            return result
+        }
+    }
+
     data object FinishScanning : ScanningIntent()
     data object CancelScanning : ScanningIntent()
-    data class SetFlashEnabled(val enabled: Boolean) : ScanningIntent()
 }
 
 sealed class ScanningEvent {
@@ -31,9 +51,7 @@ sealed class ScanningEvent {
 
 @HiltViewModel
 class ScanningViewModel @Inject constructor(
-    private val cameraRepository: CameraRepository,
-    private val processImageUseCase: ProcessImageUseCase,
-    private val clearTempScanFilesUseCase: ClearTempScanFilesUseCase,
+    private val imageRepository: ImageRepository,
     private val defaultDispatcher: CoroutineDispatcher
 ) : ViewModel() {
 
@@ -43,31 +61,33 @@ class ScanningViewModel @Inject constructor(
     private val _events = MutableSharedFlow<ScanningEvent>()
     val events = _events.asSharedFlow()
 
-    val cameraController = cameraRepository.getController()
-
     init {
         viewModelScope.launch(defaultDispatcher) {
-            clearTempScanFilesUseCase.clearAllTempFiles()
+            imageRepository.clearAllTempFiles()
         }
     }
 
     fun onAction(intent: ScanningIntent) {
         when (intent) {
-            is ScanningIntent.RequestCapture -> requestCapture()
+            is ScanningIntent.PhotoCaptured -> handlePhotoCaptured(
+                intent.imageBytes,
+                intent.rotationDegrees
+            )
+
             is ScanningIntent.FinishScanning -> finishScanning()
             is ScanningIntent.CancelScanning -> cancelScanning()
-            is ScanningIntent.SetFlashEnabled -> cameraRepository.setFlashEnabled(intent.enabled)
         }
     }
 
-    private fun requestCapture() {
+    private fun handlePhotoCaptured(
+        imageBytes: ByteArray,
+        rotationDegrees: Int
+    ) {
         viewModelScope.launch(defaultDispatcher) {
             try {
-                val bitmap = cameraRepository.takePicture()
-                if (bitmap != null) {
-                    val imagePath = processImageUseCase(bitmap, _state.value.step)
-                    onPhotoCaptured(imagePath)
-                }
+                val imagePath =
+                    imageRepository.processImage(imageBytes, _state.value.step, rotationDegrees)
+                onPhotoCaptured(imagePath)
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
                 Log.e("ScanningViewModel", "Photo capture failed", e)
@@ -76,42 +96,42 @@ class ScanningViewModel @Inject constructor(
     }
 
     private fun onPhotoCaptured(imagePath: String) {
-        val currentState = _state.value
-        val updatedState = if (currentState.step == ScanStep.PRODUCT_PHOTO) {
-            currentState.copy(
-                step = ScanStep.DATE_PHOTO,
-                currentItem = currentState.currentItem.copy(productImagePath = imagePath)
-            )
-        } else {
-            val updatedItem = currentState.currentItem.copy(dateImagePath = imagePath)
-            val newList = currentState.scannedItems + updatedItem
-            currentState.copy(
-                step = ScanStep.PRODUCT_PHOTO,
-                currentItem = ScannedItem(),
-                scannedItems = newList
-            )
+        _state.update { currentState ->
+            if (currentState.step == ScanStep.PRODUCT_PHOTO) {
+                currentState.copy(
+                    step = ScanStep.DATE_PHOTO,
+                    currentItem = currentState.currentItem.copy(productImagePath = imagePath)
+                )
+            } else {
+                val updatedItem = currentState.currentItem.copy(dateImagePath = imagePath)
+                val newList = currentState.scannedItems + updatedItem
+                currentState.copy(
+                    step = ScanStep.PRODUCT_PHOTO,
+                    currentItem = ScannedItem(),
+                    scannedItems = newList
+                )
+            }
         }
-        _state.value = updatedState
     }
 
     private fun finishScanning() {
         viewModelScope.launch {
             val items = _state.value.scannedItems
-            _state.value = UiState.Scanning(step = ScanStep.PRODUCT_PHOTO)
+            _state.update { UiState.Scanning(step = ScanStep.PRODUCT_PHOTO) }
             _events.emit(ScanningEvent.Finished(items))
         }
     }
 
     private fun cancelScanning() {
         viewModelScope.launch(defaultDispatcher) {
-            val items = _state.value.scannedItems + listOfNotNull(_state.value.currentItem)
-            clearTempScanFilesUseCase(items)
-            _state.value = UiState.Scanning(step = ScanStep.PRODUCT_PHOTO)
+            val currentItem = _state.value.currentItem
+            val itemsToClear = if (currentItem.productImagePath != null || currentItem.dateImagePath != null) {
+                _state.value.scannedItems + currentItem
+            } else {
+                _state.value.scannedItems
+            }
+            imageRepository.clearTempFiles(itemsToClear)
+            _state.update { UiState.Scanning(step = ScanStep.PRODUCT_PHOTO) }
         }
-    }
-
-    override fun onCleared() {
-        super.onCleared()
-        cameraRepository.unbind()
     }
 }

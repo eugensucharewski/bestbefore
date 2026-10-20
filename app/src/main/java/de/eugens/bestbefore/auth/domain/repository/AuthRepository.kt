@@ -1,6 +1,6 @@
 package de.eugens.bestbefore.auth.domain.repository
 
-import de.eugens.bestbefore.auth.presentation.AuthState
+import de.eugens.bestbefore.auth.domain.model.AuthState
 import kotlinx.coroutines.flow.Flow
 
 interface AuthRepository {

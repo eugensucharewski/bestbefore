@@ -29,9 +29,9 @@ import com.google.accompanist.permissions.rememberPermissionState
 import de.eugens.bestbefore.Constants
 import de.eugens.bestbefore.MainActivity
 import de.eugens.bestbefore.R
+import de.eugens.bestbefore.auth.domain.model.AuthState
 import de.eugens.bestbefore.auth.presentation.AuthIntent
 import de.eugens.bestbefore.auth.presentation.AuthScreen
-import de.eugens.bestbefore.auth.presentation.AuthState
 import de.eugens.bestbefore.auth.presentation.AuthViewModel
 import de.eugens.bestbefore.edit_product.presentation.EditProductIntent
 import de.eugens.bestbefore.edit_product.presentation.EditProductScreen
@@ -163,10 +163,14 @@ fun ProductsScreen(
                             }
                             ScanningScreen(
                                 state = scanningState,
-                                cameraController = scanningViewModel.cameraController as androidx.camera.view.LifecycleCameraController,
-                                onFlashToggle = { enabled -> scanningViewModel.onAction(ScanningIntent.SetFlashEnabled(enabled)) },
-                                onCaptureClick = { scanningViewModel.onAction(ScanningIntent.RequestCapture) },
-                                onCancel = { productViewModel.onAction(ProductIntent.PopBackStack) },
+                                onFlashToggle = { /* handled in ScanningScreen */ },
+                                onPhotoCaptured = { bytes, rotation ->
+                                    scanningViewModel.onAction(ScanningIntent.PhotoCaptured(bytes, rotation))
+                                },
+                                onCancel = {
+                                    scanningViewModel.onAction(ScanningIntent.CancelScanning)
+                                    productViewModel.onAction(ProductIntent.PopBackStack)
+                                },
                                 onFinish = { scanningViewModel.onAction(ScanningIntent.FinishScanning) }
                             )
                         }

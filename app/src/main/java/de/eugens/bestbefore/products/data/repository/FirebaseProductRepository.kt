@@ -104,16 +104,30 @@ class FirebaseProductRepository @Inject constructor(
             .whereEqualTo(Constants.FIELD_USER_ID, currentUser.uid)
             .get().await()
         snapshot.documents.map { doc ->
-            val product = doc.toObject(Product::class.java)?.copy(id = doc.id) ?: Product()
+            val rawProduct = doc.toObject(Product::class.java)
+            val name = rawProduct?.name ?: doc.getString(NAME) ?: ""
+            val expirationDate = rawProduct?.expirationDate ?: doc.getString(EXPIRATION_DATE) ?: ""
+            val productionDate = rawProduct?.productionDate ?: doc.getString(PRODUCTION_DATE)
+            val confidence = rawProduct?.confidence ?: doc.getString(CONFIDENCE)
+            val rawText = rawProduct?.rawText ?: doc.getString(RAW_TEXT)
+            val userId = rawProduct?.userId ?: doc.getString(Constants.FIELD_USER_ID)
+
             val extractedImage = extractImageFromDocument(doc)
             val isCached = File(imagesDir, doc.id).let { it.exists() && it.length() > 0 }
-            val hasImage = product.hasImage || !extractedImage.isNullOrEmpty() || isCached
+            val hasImage = (rawProduct?.hasImage ?: doc.getBoolean(HAS_IMAGE) ?: false) || !extractedImage.isNullOrEmpty() || isCached
             if (!extractedImage.isNullOrEmpty()) {
                 saveBase64ToCacheFile(doc.id, extractedImage)
             }
-            product.copy(
+            Product(
+                id = doc.id,
+                name = name,
+                expirationDate = expirationDate,
+                productionDate = productionDate,
+                confidence = confidence,
+                rawText = rawText,
+                productImage = null,
                 hasImage = hasImage,
-                productImage = null
+                userId = userId
             )
         }
     }
@@ -301,7 +315,7 @@ class FirebaseProductRepository @Inject constructor(
 
     override suspend fun saveAnalysisResults(results: List<ExpirationInfo>, items: List<ScannedItem>) {
         withContext(Dispatchers.IO) {
-            val currentUser = auth.currentUser
+            val currentUser = auth.currentUser ?: throw IllegalStateException("User not authenticated")
             results.forEachIndexed { index, info ->
                 val imagePath = items.getOrNull(index)?.productImagePath
                 val encodedImage = imagePath?.let { path ->
@@ -310,13 +324,13 @@ class FirebaseProductRepository @Inject constructor(
                 val hasImage = !encodedImage.isNullOrEmpty()
 
                 val productMap = hashMapOf(
-                    NAME to info.productName,
+                    NAME to (info.productName ?: ""),
                     EXPIRATION_DATE to (info.expiration_date ?: ""),
                     PRODUCTION_DATE to info.production_date,
                     CONFIDENCE to info.confidence,
                     RAW_TEXT to info.raw_text_detected,
                     HAS_IMAGE to hasImage,
-                    Constants.FIELD_USER_ID to currentUser?.uid
+                    Constants.FIELD_USER_ID to currentUser.uid
                 )
                 val docRef = db.collection(Constants.COLLECTION_PRODUCTS).add(productMap).await()
 

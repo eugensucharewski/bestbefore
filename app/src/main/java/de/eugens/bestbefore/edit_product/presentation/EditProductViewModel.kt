@@ -8,11 +8,19 @@ import de.eugens.bestbefore.products.domain.model.Product
 import de.eugens.bestbefore.products.domain.use_case.DeleteProductUseCase
 import de.eugens.bestbefore.products.domain.use_case.GetProductImageFileUseCase
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+
+sealed class EditProductEvent {
+    data object ProductSaved : EditProductEvent()
+    data object ProductDeleted : EditProductEvent()
+}
 
 @HiltViewModel
 class EditProductViewModel @Inject constructor(
@@ -24,13 +32,16 @@ class EditProductViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(EditProductUiState())
     val uiState: StateFlow<EditProductUiState> = _uiState.asStateFlow()
 
+    private val _events = MutableSharedFlow<EditProductEvent>()
+    val events: SharedFlow<EditProductEvent> = _events.asSharedFlow()
+
     fun onAction(intent: EditProductIntent) {
         when (intent) {
             is EditProductIntent.SetProduct -> setProduct(intent.product, intent.initialImagePath)
             is EditProductIntent.ChangeName -> onNameChange(intent.newName)
             is EditProductIntent.ChangeExpirationDate -> onExpirationDateChange(intent.newDate)
-            is EditProductIntent.SaveProduct -> saveProduct(intent.onSuccess)
-            is EditProductIntent.DeleteProduct -> deleteProduct(intent.onSuccess)
+            is EditProductIntent.SaveProduct -> saveProduct()
+            is EditProductIntent.DeleteProduct -> deleteProduct()
         }
     }
 
@@ -65,11 +76,11 @@ class EditProductViewModel @Inject constructor(
         )
     }
 
-    fun saveProduct(onSuccess: () -> Unit) {
+    fun saveProduct() {
         viewModelScope.launch {
             try {
                 updateProductUseCase(_uiState.value.product)
-                onSuccess()
+                _events.emit(EditProductEvent.ProductSaved)
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
                 _uiState.value = _uiState.value.copy(error = e.message)
@@ -77,11 +88,11 @@ class EditProductViewModel @Inject constructor(
         }
     }
 
-    fun deleteProduct(onSuccess: () -> Unit) {
+    fun deleteProduct() {
         viewModelScope.launch {
             try {
                 deleteProductUseCase(_uiState.value.product.id)
-                onSuccess()
+                _events.emit(EditProductEvent.ProductDeleted)
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
                 _uiState.value = _uiState.value.copy(error = e.message)

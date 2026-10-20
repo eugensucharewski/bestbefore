@@ -6,6 +6,6 @@ sealed interface EditProductIntent {
     data class SetProduct(val product: Product, val initialImagePath: String? = null) : EditProductIntent
     data class ChangeName(val newName: String) : EditProductIntent
     data class ChangeExpirationDate(val newDate: String) : EditProductIntent
-    data class SaveProduct(val onSuccess: () -> Unit) : EditProductIntent
-    data class DeleteProduct(val onSuccess: () -> Unit) : EditProductIntent
+    data object SaveProduct : EditProductIntent
+    data object DeleteProduct : EditProductIntent
 }

@@ -7,14 +7,13 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import de.eugens.bestbefore.Constants
+import de.eugens.bestbefore.auth.domain.model.AuthState
 import de.eugens.bestbefore.auth.domain.repository.AuthRepository
-import de.eugens.bestbefore.auth.presentation.AuthState
 import de.eugens.bestbefore.products.domain.model.ExpirationStatus
 import de.eugens.bestbefore.products.domain.model.Product
 import de.eugens.bestbefore.products.domain.model.ScannedItem
-import de.eugens.bestbefore.products.domain.use_case.AddProductUseCase
+import de.eugens.bestbefore.products.domain.repository.ImageRepository
 import de.eugens.bestbefore.products.domain.use_case.AnalyzeImagesUseCase
-import de.eugens.bestbefore.products.domain.use_case.ClearTempScanFilesUseCase
 import de.eugens.bestbefore.products.domain.use_case.DeleteProductUseCase
 import de.eugens.bestbefore.products.domain.use_case.FilterProductsUseCase
 import de.eugens.bestbefore.products.domain.use_case.FormatExpirationDateUseCase
@@ -50,7 +49,6 @@ sealed class ProductIntent {
     data class DeleteProduct(val product: Product) : ProductIntent()
     data object ConfirmDelete : ProductIntent()
     data object DismissDelete : ProductIntent()
-    data class AddProduct(val product: Product) : ProductIntent()
     data class SetFilter(val filter: ProductFilter) : ProductIntent()
     data class SelectProductForEdit(val product: Product) : ProductIntent()
     data class ToggleSelection(val productId: String) : ProductIntent()
@@ -87,11 +85,10 @@ data class ProductScreenState(
 @HiltViewModel
 class ProductViewModel @Inject constructor(
     private val getProductsUseCase: GetProductsUseCase,
-    private val addProductUseCase: AddProductUseCase,
     private val deleteProductUseCase: DeleteProductUseCase,
     private val analyzeImagesUseCase: AnalyzeImagesUseCase,
     private val saveAnalysisResultsUseCase: SaveAnalysisResultsUseCase,
-    private val clearTempScanFilesUseCase: ClearTempScanFilesUseCase,
+    private val imageRepository: ImageRepository,
     private val getProductImageFileUseCase: GetProductImageFileUseCase,
     private val getExpirationStatusUseCase: GetExpirationStatusUseCase,
     private val filterProductsUseCase: FilterProductsUseCase,
@@ -197,7 +194,6 @@ class ProductViewModel @Inject constructor(
             }
 
             is ProductIntent.DismissDelete -> _internalState.update { it.copy(productToDelete = null) }
-            is ProductIntent.AddProduct -> addProduct(intent.product)
             is ProductIntent.SetFilter -> _internalState.update { it.copy(currentFilter = intent.filter) }
             is ProductIntent.SelectProductForEdit -> selectProductForEdit(intent.product)
             is ProductIntent.ToggleSelection -> toggleSelection(intent.productId)
@@ -331,7 +327,11 @@ class ProductViewModel @Inject constructor(
 
     private fun popBackStack() {
         if (backStack.size > 1) {
+            val lastState = backStack.last()
             backStack = backStack.dropLast(1)
+            if (lastState is UiState.EditProduct) {
+                loadProducts()
+            }
         } else {
             backStack = listOf(UiState.MainList)
         }
@@ -365,7 +365,7 @@ class ProductViewModel @Inject constructor(
                 Log.e(TAG, "processItems failed", e)
                 backStack = backStack + UiState.Error(e.localizedMessage ?: "Analysis failed")
             } finally {
-                clearTempScanFilesUseCase(items)
+                imageRepository.clearTempFiles(items)
             }
         }
     }
@@ -379,19 +379,6 @@ class ProductViewModel @Inject constructor(
                 throw e
             } catch (e: Exception) {
                 Log.e(TAG, "deleteProduct failed", e)
-            }
-        }
-    }
-
-    private fun addProduct(product: Product) {
-        viewModelScope.launch {
-            try {
-                addProductUseCase(product)
-                refreshProducts()
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                Log.e(TAG, "addProduct failed", e)
             }
         }
     }
