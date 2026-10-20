@@ -3,8 +3,8 @@ package de.eugens.bestbefore.auth.data.repository
 import com.google.firebase.Firebase
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.auth
+import de.eugens.bestbefore.auth.domain.model.AuthState
 import de.eugens.bestbefore.auth.domain.repository.AuthRepository
-import de.eugens.bestbefore.auth.presentation.AuthState
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -21,9 +21,9 @@ class FirebaseAuthRepository @Inject constructor(): AuthRepository {
 
     override fun observeAuthState(): Flow<AuthState> = callbackFlow {
         val listener = FirebaseAuth.AuthStateListener { firebaseAuth ->
-            val user = firebaseAuth.currentUser
-            if (user != null) {
-                trySend(AuthState.Authenticated(user.email))
+            val email = firebaseAuth.currentUser?.email
+            if (email != null) {
+                trySend(AuthState.Authenticated(email))
             } else {
                 trySend(AuthState.Unauthenticated)
             }

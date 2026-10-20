@@ -2,6 +2,7 @@ package de.eugens.bestbefore.auth.presentation
 
 import app.cash.turbine.test
 import de.eugens.bestbefore.MainDispatcherRule
+import de.eugens.bestbefore.auth.domain.model.AuthState
 import de.eugens.bestbefore.auth.domain.use_case.GetCurrentUserEmailUseCase
 import de.eugens.bestbefore.auth.domain.use_case.ObserveAuthStateUseCase
 import de.eugens.bestbefore.auth.domain.use_case.SignInUseCase
@@ -11,7 +12,6 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
-import io.mockk.verify
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.runTest

@@ -20,6 +20,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -36,6 +37,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import de.eugens.bestbefore.R
 import de.eugens.bestbefore.products.domain.model.Product
+import kotlinx.coroutines.flow.collectLatest
 import java.io.File
 
 @Composable
@@ -46,6 +48,15 @@ fun EditProductScreen(
     val uiState by viewModel.uiState.collectAsState()
     var showDeleteConfirm by remember { mutableStateOf(false) }
 
+    LaunchedEffect(viewModel) {
+        viewModel.events.collectLatest { event ->
+            when (event) {
+                is EditProductEvent.ProductSaved,
+                is EditProductEvent.ProductDeleted -> onBack()
+            }
+        }
+    }
+
     if (showDeleteConfirm) {
         AlertDialog(
             onDismissRequest = { showDeleteConfirm = false },
@@ -54,7 +65,7 @@ fun EditProductScreen(
             confirmButton = {
                 TextButton(
                     onClick = {
-                        viewModel.onAction(EditProductIntent.DeleteProduct(onBack))
+                        viewModel.onAction(EditProductIntent.DeleteProduct)
                         showDeleteConfirm = false
                     },
                     colors = ButtonDefaults.textButtonColors(contentColor = Color.Red)
@@ -77,7 +88,7 @@ fun EditProductScreen(
         onNameChange = { viewModel.onAction(EditProductIntent.ChangeName(it)) },
         onExpirationDateChange = { viewModel.onAction(EditProductIntent.ChangeExpirationDate(it)) },
         onSave = {
-            viewModel.onAction(EditProductIntent.SaveProduct(onBack))
+            viewModel.onAction(EditProductIntent.SaveProduct)
         },
         onDeleteClick = { showDeleteConfirm = true }
     )

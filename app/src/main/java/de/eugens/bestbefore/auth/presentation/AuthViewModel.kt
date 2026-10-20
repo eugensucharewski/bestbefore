@@ -4,14 +4,15 @@ import androidx.compose.foundation.text.input.TextFieldState
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import de.eugens.bestbefore.R
+import de.eugens.bestbefore.auth.domain.model.AuthState
 import de.eugens.bestbefore.auth.domain.use_case.GetCurrentUserEmailUseCase
 import de.eugens.bestbefore.auth.domain.use_case.ObserveAuthStateUseCase
 import de.eugens.bestbefore.auth.domain.use_case.SignInUseCase
 import de.eugens.bestbefore.auth.domain.use_case.SignOutUseCase
 import de.eugens.bestbefore.auth.domain.use_case.SignUpUseCase
-import kotlinx.coroutines.flow.MutableStateFlow
-import de.eugens.bestbefore.R
 import de.eugens.bestbefore.common.UiText
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
