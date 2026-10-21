@@ -25,24 +25,19 @@ class GeminiNanoProductAnalyzer @Inject constructor(
     private val parseExpirationDateUseCase: ParseExpirationDateUseCase
 ) : AIProductAnalyzer {
 
-    constructor() : this(ParseExpirationDateUseCase())
-
     companion object {
         private const val TAG = "GeminiNanoProductAnalyzer"
     }
 
     private val json = Json { ignoreUnknownKeys = true }
 
-    internal fun getGenerativeModel(): GenerativeModel {
-        return Generation.getClient()
-    }
+    private val generativeModel by lazy { Generation.getClient() }
 
     override suspend fun analyzeImages(items: List<ScannedItem>): List<ExpirationInfo> =
         withContext(Dispatchers.IO) {
             if (items.isEmpty()) {
                 return@withContext emptyList()
             }
-            val generativeModel = getGenerativeModel()
             val loadedBitmaps = mutableListOf<Bitmap>()
             try {
                 if (!ensureModelReady(generativeModel)) {
@@ -90,7 +85,7 @@ class GeminiNanoProductAnalyzer @Inject constructor(
                 val cleanJson = extractJson(outputText)
                 try {
                     val decoded = json.decodeFromString<List<ExpirationInfo>>(cleanJson)
-                    decoded.map { info ->
+                    return@withContext decoded.map { info ->
                         info.copy(
                             expiration_date = parseExpirationDateUseCase.formatToStandardDate(info.expiration_date) ?: info.expiration_date,
                             production_date = parseExpirationDateUseCase.formatToStandardDate(info.production_date) ?: info.production_date
@@ -110,11 +105,6 @@ class GeminiNanoProductAnalyzer @Inject constructor(
                     if (!bitmap.isRecycled) {
                         bitmap.recycle()
                     }
-                }
-                try {
-                    generativeModel.close()
-                } catch (ce: Exception) {
-                    Log.w(TAG, "Error closing Gemini Nano model instance: ${ce.message}")
                 }
             }
         }

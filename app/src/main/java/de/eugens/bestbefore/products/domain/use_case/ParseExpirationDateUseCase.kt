@@ -62,10 +62,10 @@ class ParseExpirationDateUseCase @Inject constructor() {
         if (sanitized.isBlank()) return null
 
         for (formatter in dateFormatters) {
-            return try {
-                LocalDate.parse(sanitized, formatter)
+            try {
+                return LocalDate.parse(sanitized, formatter)
             } catch (_: Exception) {
-                continue
+                // Ignore and proceed to the next formatter
             }
         }
         return null

@@ -24,8 +24,6 @@ class GeminiProductAnalyzer @Inject constructor(
     private val parseExpirationDateUseCase: ParseExpirationDateUseCase
 ) : AIProductAnalyzer {
 
-    constructor() : this(ParseExpirationDateUseCase())
-
     companion object {
         private const val TAG = "GeminiProductAnalyzer"
         private const val PRIMARY_MODEL_NAME = "gemini-3.8-flash"

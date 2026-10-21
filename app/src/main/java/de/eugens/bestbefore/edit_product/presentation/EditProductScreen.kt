@@ -37,7 +37,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import de.eugens.bestbefore.R
 import de.eugens.bestbefore.products.domain.model.Product
-import kotlinx.coroutines.flow.collectLatest
 import java.io.File
 
 @Composable
@@ -49,7 +48,7 @@ fun EditProductScreen(
     var showDeleteConfirm by remember { mutableStateOf(false) }
 
     LaunchedEffect(viewModel) {
-        viewModel.events.collectLatest { event ->
+        viewModel.events.collect { event ->
             when (event) {
                 is EditProductEvent.ProductSaved,
                 is EditProductEvent.ProductDeleted -> onBack()

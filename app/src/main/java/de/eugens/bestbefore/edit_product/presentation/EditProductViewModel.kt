@@ -8,12 +8,12 @@ import de.eugens.bestbefore.products.domain.model.Product
 import de.eugens.bestbefore.products.domain.use_case.DeleteProductUseCase
 import de.eugens.bestbefore.products.domain.use_case.GetProductImageFileUseCase
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -32,8 +32,8 @@ class EditProductViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(EditProductUiState())
     val uiState: StateFlow<EditProductUiState> = _uiState.asStateFlow()
 
-    private val _events = MutableSharedFlow<EditProductEvent>()
-    val events: SharedFlow<EditProductEvent> = _events.asSharedFlow()
+    private val _events = Channel<EditProductEvent>()
+    val events: Flow<EditProductEvent> = _events.receiveAsFlow()
 
     fun onAction(intent: EditProductIntent) {
         when (intent) {
@@ -80,7 +80,7 @@ class EditProductViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 updateProductUseCase(_uiState.value.product)
-                _events.emit(EditProductEvent.ProductSaved)
+                _events.send(EditProductEvent.ProductSaved)
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
                 _uiState.value = _uiState.value.copy(error = e.message)
@@ -92,7 +92,7 @@ class EditProductViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 deleteProductUseCase(_uiState.value.product.id)
-                _events.emit(EditProductEvent.ProductDeleted)
+                _events.send(EditProductEvent.ProductDeleted)
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
                 _uiState.value = _uiState.value.copy(error = e.message)

@@ -68,6 +68,7 @@ class GoogleMlKitTextRecognizer @Inject constructor(
                 } catch (e: Exception) {
                     if (e is CancellationException) throw e
                     Log.e("GoogleMlKitTextRecognizer", "Error analyzing item ${item.productImagePath}: $e", e)
+                    results.add(TextRecognitionResult("", "", item.dateImagePath))
                 }
             }
         }
