@@ -4,6 +4,7 @@ import java.time.Clock
 import java.time.DateTimeException
 import java.time.LocalDate
 import java.time.YearMonth
+import javax.inject.Inject
 
 enum class ConfidenceLevel {
     HIGH,   // Found date near explicit expiration marker (MHD, EXP, BEST BEFORE)
@@ -17,10 +18,11 @@ data class ExpiryDateResult(
     val confidence: ConfidenceLevel
 )
 
-class ExpiryDateParser(
+class ExpirationDateParser(
     private val clock: Clock
 ) {
-    @javax.inject.Inject constructor() : this(Clock.systemDefaultZone())
+    @Inject
+    constructor() : this(Clock.systemDefaultZone())
 
     companion object {
         // Expiration date markers (increase priority)
@@ -53,8 +55,9 @@ class ExpiryDateParser(
         private val MONTH_NAMES_PATTERN = MONTH_MAP.keys.joinToString("|")
 
         // 1. DD.MM.YYYY or DD.MM.YY (separators: dot, slash, hyphen, spaces around them)
+        // Для 4-значного года (2024..2035) безопасно разрешить пробелы и двоеточия
         private val REGEX_DMY_NUMERIC = Regex(
-            """(?<!\d)([0-3OIl|]?\d)\s*[./-]\s*([01OIl|]?\d)\s*[./-]\s*(\d{2,4})(?!\d)"""
+            """(?<!\d)([0-3OIl|]?\d)\s*[./:\s-]{1,3}\s*([01OIl|]?\d)\s*[./:\s-]{1,3}\s*(20\d{2}|\d{2,4})(?!\d{2})"""
         )
 
         // 2. YYYY-MM-DD or YYYY.MM.DD (ISO)
@@ -64,12 +67,17 @@ class ExpiryDateParser(
 
         // 3. DD MMM YYYY or DD. MMM YY (text month)
         private val REGEX_DMY_TEXT_MONTH = Regex(
-            """(?i)(?<!\d)([0-3OIl|]?\d)\s*[./\s-]{1,3}\s*($MONTH_NAMES_PATTERN)[A-ZА-ЯЁ.]*\s*[./\s-]{1,3}\s*(\d{2,4})(?!\d)"""
+            """(?i)(?<!\d)([0-3OIl|]?\d)\s*[./\s-]{1,3}\s*($MONTH_NAMES_PATTERN)[A-ZА-ЯЁ.]*\s*[./\s-]{1,3}\s*(\d{2,4})(?!\d{2})"""
         )
 
         // 4. MM/YYYY or MM.YY (without day — normalized to end of month)
         private val REGEX_MY_NUMERIC = Regex(
-            """(?<!\d)([01OIl|]\d)\s*[./-]\s*(20\d{2}|\d{2})(?!\d)"""
+            """(?<!\d)([01OIl|]\d)\s*[./-]\s*(20\d{2}|\d{2,3})(?!\d{2})"""
+        )
+
+        // 5. DD.MM. or DD.MM (without year)
+        private val REGEX_DM_NUMERIC = Regex(
+            """(?<!\d)([0-3OIl|]?\d)\s*[./-]\s*([01OIl|]?\d)\s*[./-]?(?!\d)"""
         )
     }
 
@@ -111,7 +119,13 @@ class ExpiryDateParser(
                 val day = cleanToInt(match.groupValues[1])
                 val monthKey = match.groupValues[2].uppercase()
                 val month = MONTH_MAP[monthKey]
-                val year = normalizeYear(cleanToInt(match.groupValues[3]), currentYear)
+                var rawYearStr = match.groupValues[3]
+                
+                if (rawYearStr.length == 3) {
+                    rawYearStr = rawYearStr.substring(0, 2)
+                }
+                
+                val year = normalizeYear(cleanToInt(rawYearStr), currentYear)
 
                 val date = buildValidDate(year, month, day, minValidYear, maxValidYear)
                 if (date != null) {
@@ -137,8 +151,12 @@ class ExpiryDateParser(
                 if (overlapsWithExisting(match.range, extractedInLine)) return@forEach
                 val day = cleanToInt(match.groupValues[1])
                 val month = cleanToInt(match.groupValues[2])
-                val rawYearStr = match.groupValues[3]
-                if (rawYearStr.length == 3) return@forEach // Exclude artifacts like 12.10.202
+                var rawYearStr = match.groupValues[3]
+                
+                // Исправляем частую ошибку ML Kit: "11.02.272" -> "11.02.27"
+                if (rawYearStr.length == 3) {
+                    rawYearStr = rawYearStr.substring(0, 2)
+                }
 
                 val year = normalizeYear(cleanToInt(rawYearStr), currentYear)
                 val isFourDigitYear = rawYearStr.length == 4
@@ -153,12 +171,37 @@ class ExpiryDateParser(
             REGEX_MY_NUMERIC.findAll(cleanedLine).forEach { match ->
                 if (overlapsWithExisting(match.range, extractedInLine)) return@forEach
                 val month = cleanToInt(match.groupValues[1])
-                val rawYearStr = match.groupValues[2]
+                var rawYearStr = match.groupValues[2]
+                
+                if (rawYearStr.length == 3) {
+                    rawYearStr = rawYearStr.substring(0, 2)
+                }
+                
                 val year = normalizeYear(cleanToInt(rawYearStr), currentYear)
 
                 if (year != null && month != null && month in 1..12 && year in minValidYear..maxValidYear) {
                     val lastDayOfMonth = YearMonth.of(year, month).atEndOfMonth()
                     extractedInLine.add(Triple(lastDayOfMonth, match.range, false))
+                }
+            }
+
+            // E. Short format DD.MM. or DD.MM (without year)
+            REGEX_DM_NUMERIC.findAll(cleanedLine).forEach { match ->
+                if (overlapsWithExisting(match.range, extractedInLine)) return@forEach
+                val day = cleanToInt(match.groupValues[1])
+                val month = cleanToInt(match.groupValues[2])
+
+                var date = buildValidDate(currentYear, month, day, minValidYear, maxValidYear)
+                if (date != null) {
+                    val today = LocalDate.now(clock)
+                    // If the date is more than 3 months in the past, assume it's next year
+                    if (date.isBefore(today.minusMonths(3))) {
+                        val nextYearDate = buildValidDate(currentYear + 1, month, day, minValidYear, maxValidYear)
+                        if (nextYearDate != null) {
+                            date = nextYearDate
+                        }
+                    }
+                    extractedInLine.add(Triple(date, match.range, false))
                 }
             }
 
@@ -239,7 +282,7 @@ class ExpiryDateParser(
         var score = if (isExplicitFull) 50 else 30
 
         val hasExpiryInLine = lineIdx in expiryMarkerLines
-        val hasExpiryInPrevLine = (lineIdx - 1) in expiryMarkerLines
+        val hasExpiryInNearbyLine = (1..3).any { (lineIdx - it) in expiryMarkerLines }
         val hasProdInLine = lineIdx in prodMarkerLines
         val hasProdInPrevLine = (lineIdx - 1) in prodMarkerLines
 
@@ -266,7 +309,7 @@ class ExpiryDateParser(
                     return null // Discard pure production date
                 }
             }
-            hasExpiryInLine || hasExpiryInPrevLine -> {
+            hasExpiryInLine || hasExpiryInNearbyLine -> {
                 // Expiration marker exists on this or previous line (e.g., "MHD siehe Deckel:\n15.08.2027")
                 if (allDatesInSameLine.size >= 2 && date == allDatesInSameLine.minOrNull()) {
                     // In a pair of dates, the earlier one is the production date
@@ -312,7 +355,7 @@ class ExpiryDateParser(
             val next = if (i < chars.lastIndex) chars[i + 1] else ' '
 
             val isNearDigitOrSep = prev.isDigit() || next.isDigit() ||
-                    prev in "./-" || next in "./-"
+                    prev in "./-:" || next in "./-:"
 
             if (isNearDigitOrSep) {
                 when (c) {
@@ -329,6 +372,30 @@ class ExpiryDateParser(
                             chars[i] = '1'
                         }
                     }
+                    'S', 's' -> {
+                        val isSurroundedByLetters = prev.isLetter() && next.isLetter()
+                        if (!isSurroundedByLetters && (prev.isDigit() || next.isDigit())) {
+                            chars[i] = '5'
+                        }
+                    }
+                    'Z', 'z' -> {
+                        val isSurroundedByLetters = prev.isLetter() && next.isLetter()
+                        if (!isSurroundedByLetters && (prev.isDigit() || next.isDigit())) {
+                            chars[i] = '2'
+                        }
+                    }
+                    'B' -> {
+                        val isSurroundedByLetters = prev.isLetter() && next.isLetter()
+                        if (!isSurroundedByLetters && (prev.isDigit() || next.isDigit())) {
+                            chars[i] = '8'
+                        }
+                    }
+                    'G', 'b' -> {
+                        val isSurroundedByLetters = prev.isLetter() && next.isLetter()
+                        if (!isSurroundedByLetters && (prev.isDigit() || next.isDigit())) {
+                            chars[i] = '6'
+                        }
+                    }
                 }
             }
         }
@@ -338,7 +405,12 @@ class ExpiryDateParser(
     private fun cleanToInt(raw: String): Int? {
         val normalized = raw
             .replace('O', '0').replace('o', '0')
+            .replace('О', '0').replace('о', '0')
             .replace('I', '1').replace('l', '1').replace('|', '1')
+            .replace('S', '5').replace('s', '5')
+            .replace('Z', '2').replace('z', '2')
+            .replace('B', '8')
+            .replace('G', '6').replace('b', '6')
             .trim()
         return normalized.toIntOrNull()
     }

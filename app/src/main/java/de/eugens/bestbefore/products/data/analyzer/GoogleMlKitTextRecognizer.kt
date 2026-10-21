@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import android.util.Log
 import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.text.Text
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -20,7 +21,8 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
 class GoogleMlKitTextRecognizer @Inject constructor(
-    @param:ApplicationContext private val context: Context
+    @param:ApplicationContext private val context: Context,
+    private val productNameExtractor: ProductNameExtractor
 ) : ImageTextRecognizer {
 
     private val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
@@ -28,8 +30,8 @@ class GoogleMlKitTextRecognizer @Inject constructor(
     override suspend fun analyzeImages(items: List<ScannedItem>): List<TextRecognitionResult> {
         val results: MutableList<TextRecognitionResult> = mutableListOf()
         withContext(Dispatchers.IO) {
-            try {
-                items.forEach { item ->
+            items.forEach { item ->
+                try {
                     var productNameText: String? = null
                     var productExpirationDate: String? = null
 
@@ -40,7 +42,12 @@ class GoogleMlKitTextRecognizer @Inject constructor(
                                 context,
                                 Uri.fromFile(productImageFile)
                             )
-                            productNameText = recognizeText(image)
+                            val visionText = recognizeText(image)
+                            productNameText = productNameExtractor.extractProductName(
+                                visionText,
+                                image.width,
+                                image.height
+                            )
                         }
                     }
                     item.dateImagePath?.let { path ->
@@ -50,29 +57,30 @@ class GoogleMlKitTextRecognizer @Inject constructor(
                                 context,
                                 Uri.fromFile(dateImageFile)
                             )
-
-                            productExpirationDate = recognizeText(image)
+                            val visionText = recognizeText(image)
+                            productExpirationDate = visionText.text
                         }
                     }
 
                     results.add(
-                        TextRecognitionResult(productNameText ?: "", productExpirationDate ?: "")
+                        TextRecognitionResult(productNameText ?: "", productExpirationDate ?: "", item.dateImagePath)
                     )
+                } catch (e: Exception) {
+                    if (e is CancellationException) throw e
+                    Log.e("GoogleMlKitTextRecognizer", "Error analyzing item ${item.productImagePath}: $e", e)
+                    results.add(TextRecognitionResult("", "", item.dateImagePath))
                 }
-            } catch (e: Exception) {
-                Log.d("GoogleMlKitTextRecognizer", "Error analyzing images: $e")
-                if (e is CancellationException) throw e
             }
         }
 
         return results
     }
 
-    private suspend fun recognizeText(image: InputImage): String =
+    private suspend fun recognizeText(image: InputImage): Text =
         suspendCancellableCoroutine { cont ->
             recognizer.process(image)
                 .addOnSuccessListener { visionText ->
-                    cont.resume(visionText.text)
+                    cont.resume(visionText)
                 }
                 .addOnFailureListener { e ->
                     cont.resumeWithException(e) }

@@ -71,6 +71,7 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.play.services.base)
+    implementation(libs.google.genai.prompt)
     implementation(libs.google.generativeai)
     implementation(libs.firebase.firestore)
     implementation(libs.firebase.auth)

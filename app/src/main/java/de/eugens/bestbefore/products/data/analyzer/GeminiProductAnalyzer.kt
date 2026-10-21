@@ -1,13 +1,15 @@
 package de.eugens.bestbefore.products.data.analyzer
 
+import android.graphics.Bitmap
 import android.util.Log
 import com.google.ai.client.generativeai.GenerativeModel
 import com.google.ai.client.generativeai.type.content
 import com.google.ai.client.generativeai.type.generationConfig
 import de.eugens.bestbefore.BuildConfig
 import de.eugens.bestbefore.products.domain.analyzer.AIProductAnalyzer
-import de.eugens.bestbefore.products.domain.analyzer.TextRecognitionResult
 import de.eugens.bestbefore.products.domain.model.ExpirationInfo
+import de.eugens.bestbefore.products.domain.model.ScannedItem
+import de.eugens.bestbefore.products.domain.use_case.ParseExpirationDateUseCase
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -18,27 +20,13 @@ import javax.inject.Singleton
 import kotlin.time.Duration.Companion.milliseconds
 
 @Singleton
-class GeminiProductAnalyzer @Inject constructor() : AIProductAnalyzer {
+class GeminiProductAnalyzer @Inject constructor(
+    private val parseExpirationDateUseCase: ParseExpirationDateUseCase
+) : AIProductAnalyzer {
 
     companion object {
         private const val TAG = "GeminiProductAnalyzer"
         private const val PRIMARY_MODEL_NAME = "gemini-3.8-flash"
-
-        private const val SYSTEM_INSTRUCTION =
-            "You are a specialized assistant for processing food product names and expiration dates from text extracted via on-device OCR. " +
-            "Because the input text was recognized on-device and may contain OCR noise, typos, or misread characters, your task is to clean up, correct, and format the product names and parse expiration or production dates. " +
-            "For each item, return a JSON object with the following fields: " +
-            "productName (String, cleaned and formatted product name), " +
-            "date_found (boolean, true if a valid expiration or production date was extracted), " +
-            "expiration_date (String in DD.MM.YYYY format, or null), " +
-            "production_date (String in YYYY-MM-DD format, or null), " +
-            "confidence (String: 'high', 'medium', or 'low' based on input clarity), " +
-            "raw_text_detected (String, the combined original raw OCR input text). " +
-            "Return ONLY a JSON array of these objects without any markdown formatting or extra text."
-
-        private const val ANALYZE_PROMPT =
-            "Analyze the following items containing raw text extracted by on-device OCR. " +
-            "Extract, clean, and structure the product names and expiration dates into a JSON array of ExpirationInfo objects."
     }
 
     private val json = Json { ignoreUnknownKeys = true }
@@ -47,53 +35,91 @@ class GeminiProductAnalyzer @Inject constructor() : AIProductAnalyzer {
         modelName = PRIMARY_MODEL_NAME,
         apiKey = BuildConfig.GEMINI_API_KEY,
         systemInstruction = content {
-            text(SYSTEM_INSTRUCTION)
+            text(LlmPrompts.buildSystemInstruction())
         },
         generationConfig = generationConfig {
             responseMimeType = "application/json"
         }
     )
 
-
-    override suspend fun analyzeImages(items: List<TextRecognitionResult>): List<ExpirationInfo> =
+    override suspend fun analyzeImages(items: List<ScannedItem>): List<ExpirationInfo> =
         withContext(Dispatchers.IO) {
-            val formattedItems = items.mapIndexed { index, item ->
-                "Item ${index + 1}:\n- Raw Product Name OCR: \"${item.productName}\"\n- Raw Expiration Date OCR: \"${item.expirationDate}\""
-            }.joinToString("\n\n")
-
-            val prompt = "$ANALYZE_PROMPT\n\nInput Data:\n$formattedItems"
-
-            val outputContent = try {
-                generateContentWithRetry(prompt)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                Log.e(TAG, "Gemini product analysis failed after retries", e)
-                val errorMsg = e.message ?: ""
-                val errorStr = e.toString()
-                if (errorStr.contains("503") || errorStr.contains("UNAVAILABLE") || errorMsg.contains("503") || errorMsg.contains("UNAVAILABLE")) {
-                    throw Exception("AI service is currently busy. Please try again later.")
-                } else if (errorStr.contains("429") || errorStr.contains("RESOURCE_EXHAUSTED") || errorMsg.contains("429")) {
-                    throw Exception("AI rate limit exceeded. Please try again in a moment.")
-                } else if (errorMsg.startsWith("AI error:") || errorMsg.startsWith("AI could not")) {
-                    throw e
-                } else {
-                    throw Exception("AI service is currently unavailable. Please try again later.")
-                }
+            if (items.isEmpty()) {
+                return@withContext emptyList()
             }
 
-            val cleanJson = extractJson(outputContent)
+            val loadedBitmaps = mutableListOf<Bitmap>()
             try {
-                json.decodeFromString<List<ExpirationInfo>>(cleanJson)
-            } catch (se: Exception) {
-                Log.e(TAG, "Failed to parse AI response. Raw text: $outputContent", se)
-                throw Exception("AI error: invalid response format. Please try again.")
+                val inputContent = content {
+                    text(LlmPrompts.ANALYZE_PROMPT)
+                    text("\n\nInput Data:\n")
+
+                    items.forEachIndexed { index, item ->
+                        text("Item ${index + 1}:\n")
+
+                        item.productImagePath?.let { path ->
+                            BitmapUtils.decodeSampledBitmapFromFile(path)?.let { bitmap ->
+                                loadedBitmaps.add(bitmap)
+                                text("Product image for Item ${index + 1}:")
+                                image(bitmap)
+                            }
+                        }
+
+                        item.dateImagePath?.let { path ->
+                            BitmapUtils.decodeSampledBitmapFromFile(path)?.let { bitmap ->
+                                loadedBitmaps.add(bitmap)
+                                text("Expiration date image for Item ${index + 1}:")
+                                image(bitmap)
+                            }
+                        }
+                        text("\n")
+                    }
+                }
+
+                val outputContent = try {
+                    generateContentWithRetry(inputContent)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Log.e(TAG, "Gemini product analysis failed after retries", e)
+                    val errorMsg = e.message ?: ""
+                    val errorStr = e.toString()
+                    if (errorStr.contains("503") || errorStr.contains("UNAVAILABLE") || errorMsg.contains("503") || errorMsg.contains("UNAVAILABLE")) {
+                        throw Exception("AI service is currently busy. Please try again later.")
+                    } else if (errorStr.contains("429") || errorStr.contains("RESOURCE_EXHAUSTED") || errorMsg.contains("429")) {
+                        throw Exception("AI rate limit exceeded. Please try again in a moment.")
+                    } else if (errorMsg.startsWith("AI error:") || errorMsg.startsWith("AI could not")) {
+                        throw e
+                    } else {
+                        throw Exception("AI service is currently unavailable. Please try again later.")
+                    }
+                }
+
+                val cleanJson = extractJson(outputContent)
+                try {
+                    val decoded = json.decodeFromString<List<ExpirationInfo>>(cleanJson)
+                    decoded.map { info ->
+                        info.copy(
+                            expiration_date = parseExpirationDateUseCase.formatToStandardDate(info.expiration_date) ?: info.expiration_date,
+                            production_date = parseExpirationDateUseCase.formatToStandardDate(info.production_date) ?: info.production_date
+                        )
+                    }
+                } catch (se: Exception) {
+                    Log.e(TAG, "Failed to parse AI response. Raw text: $outputContent", se)
+                    throw Exception("AI error: invalid response format. Please try again.")
+                }
+            } finally {
+                loadedBitmaps.forEach { bitmap ->
+                    if (!bitmap.isRecycled) {
+                        bitmap.recycle()
+                    }
+                }
             }
         }
 
-    private suspend fun generateContentWithRetry(prompt: String): String {
+    private suspend fun generateContentWithRetry(contentParam: com.google.ai.client.generativeai.type.Content): String {
         return retryWithBackoff(times = 2, initialDelay = 1000) {
-            val response = primaryModel.generateContent(content { text(prompt) })
+            val response = primaryModel.generateContent(contentParam)
             response.text ?: throw Exception("Empty response from AI")
         }
     }
@@ -118,13 +144,5 @@ class GeminiProductAnalyzer @Inject constructor() : AIProductAnalyzer {
         return block()
     }
 
-    internal fun extractJson(text: String): String {
-        val jsonStart = text.indexOf("[")
-        val jsonEnd = text.lastIndexOf("]")
-        return if (jsonStart != -1 && jsonEnd != -1 && jsonEnd > jsonStart) {
-            text.substring(jsonStart, jsonEnd + 1)
-        } else {
-            text
-        }
-    }
+    internal fun extractJson(text: String): String = LlmPrompts.extractJson(text)
 }
