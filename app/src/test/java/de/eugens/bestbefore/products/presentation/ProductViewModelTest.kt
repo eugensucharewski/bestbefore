@@ -5,14 +5,13 @@ import app.cash.turbine.test
 import de.eugens.bestbefore.Constants
 import de.eugens.bestbefore.MainDispatcherRule
 import de.eugens.bestbefore.auth.data.repository.FirebaseAuthRepository
-import de.eugens.bestbefore.auth.presentation.AuthState
+import de.eugens.bestbefore.auth.domain.model.AuthState
 import de.eugens.bestbefore.products.domain.model.ExpirationInfo
 import de.eugens.bestbefore.products.domain.model.ExpirationStatus
 import de.eugens.bestbefore.products.domain.model.Product
 import de.eugens.bestbefore.products.domain.model.ScannedItem
-import de.eugens.bestbefore.products.domain.use_case.AddProductUseCase
+import de.eugens.bestbefore.products.domain.repository.ImageRepository
 import de.eugens.bestbefore.products.domain.use_case.AnalyzeImagesUseCase
-import de.eugens.bestbefore.products.domain.use_case.ClearTempScanFilesUseCase
 import de.eugens.bestbefore.products.domain.use_case.DeleteProductUseCase
 import de.eugens.bestbefore.products.domain.use_case.FilterProductsUseCase
 import de.eugens.bestbefore.products.domain.use_case.FormatExpirationDateUseCase
@@ -47,11 +46,10 @@ class ProductViewModelTest {
 
     private lateinit var viewModel: ProductViewModel
     private val getProductsUseCase: GetProductsUseCase = mockk()
-    private val addProductUseCase: AddProductUseCase = mockk()
     private val deleteProductUseCase: DeleteProductUseCase = mockk()
     private val analyzeImagesUseCase: AnalyzeImagesUseCase = mockk()
     private val saveAnalysisResultsUseCase: SaveAnalysisResultsUseCase = mockk()
-    private val clearTempScanFilesUseCase: ClearTempScanFilesUseCase = mockk(relaxed = true)
+    private val imageRepository: ImageRepository = mockk(relaxed = true)
     private val getProductImageFileUseCase: GetProductImageFileUseCase = mockk()
     private val settingsRepository: SettingsRepository = mockk()
     private val authRepository: FirebaseAuthRepository = mockk()
@@ -82,11 +80,10 @@ class ProductViewModelTest {
 
         viewModel = ProductViewModel(
             getProductsUseCase,
-            addProductUseCase,
             deleteProductUseCase,
             analyzeImagesUseCase,
             saveAnalysisResultsUseCase,
-            clearTempScanFilesUseCase,
+            imageRepository,
             getProductImageFileUseCase,
             getExpirationStatusUseCase,
             filterProductsUseCase,
@@ -409,7 +406,7 @@ class ProductViewModelTest {
             assertEquals(UiState.MainList, state.backStack.last())
             coVerify { analyzeImagesUseCase(items) }
             coVerify { saveAnalysisResultsUseCase(analysisResults, items) }
-            coVerify { clearTempScanFilesUseCase(items) }
+            coVerify { imageRepository.clearTempFiles(items) }
             cancelAndIgnoreRemainingEvents()
         }
     }

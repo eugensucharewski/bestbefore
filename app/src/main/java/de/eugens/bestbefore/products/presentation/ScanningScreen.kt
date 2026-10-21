@@ -1,16 +1,41 @@
 package de.eugens.bestbefore.products.presentation
 
+import android.util.Log
+import androidx.camera.core.ImageCapture
+import androidx.camera.core.ImageCaptureException
+import androidx.camera.core.ImageProxy
 import androidx.camera.view.LifecycleCameraController
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.filled.Cancel
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.FlashOff
+import androidx.compose.material.icons.filled.FlashOn
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
@@ -20,10 +45,12 @@ import androidx.compose.ui.graphics.ClipOp
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import de.eugens.bestbefore.Constants
 import de.eugens.bestbefore.R
@@ -31,14 +58,14 @@ import de.eugens.bestbefore.R
 @Composable
 fun ScanningScreen(
     state: UiState.Scanning,
-    cameraController: Any,
     onFlashToggle: (Boolean) -> Unit,
-    onCaptureClick: () -> Unit,
+    onPhotoCaptured: (ByteArray, Int) -> Unit,
     onCancel: () -> Unit,
     onFinish: () -> Unit
 ) {
+    val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
-    val controller = remember { cameraController as LifecycleCameraController }
+    val controller = remember { LifecycleCameraController(context) }
     var isFlashOn by remember { mutableStateOf(false) }
 
     DisposableEffect(lifecycleOwner) {
@@ -46,6 +73,25 @@ fun ScanningScreen(
         onDispose {
             controller.unbind()
         }
+    }
+
+    val takePicture = {
+        controller.takePicture(
+            ContextCompat.getMainExecutor(context),
+            object : ImageCapture.OnImageCapturedCallback() {
+                override fun onCaptureSuccess(image: ImageProxy) {
+                    val buffer = image.planes[0].buffer
+                    val bytes = ByteArray(buffer.remaining())
+                    buffer.get(bytes)
+                    onPhotoCaptured(bytes, image.imageInfo.rotationDegrees)
+                    image.close()
+                }
+
+                override fun onError(exception: ImageCaptureException) {
+                    Log.e("ScanningScreen", "Photo capture failed", exception)
+                }
+            }
+        )
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -80,6 +126,7 @@ fun ScanningScreen(
         IconButton(
             onClick = {
                 isFlashOn = !isFlashOn
+                controller.enableTorch(isFlashOn)
                 onFlashToggle(isFlashOn)
             },
             modifier = Modifier.align(Alignment.TopEnd).padding(16.dp)
@@ -108,7 +155,7 @@ fun ScanningScreen(
             }
 
             Button(
-                onClick = onCaptureClick,
+                onClick = takePicture,
                 modifier = Modifier.size(80.dp),
                 shape = CircleShape,
                 colors = ButtonDefaults.buttonColors(containerColor = Color.White)

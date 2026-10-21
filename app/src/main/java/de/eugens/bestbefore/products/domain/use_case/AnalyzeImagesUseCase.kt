@@ -8,6 +8,7 @@ import javax.inject.Inject
 class AnalyzeImagesUseCase @Inject constructor(
     private val analyzer: AIProductAnalyzer
 ) {
-    suspend operator fun invoke(items: List<ScannedItem>): List<ExpirationInfo> =
-        analyzer.analyzeImages(items)
+    suspend operator fun invoke(items: List<ScannedItem>): List<ExpirationInfo> {
+        return analyzer.analyzeImages(items)
+    }
 }
