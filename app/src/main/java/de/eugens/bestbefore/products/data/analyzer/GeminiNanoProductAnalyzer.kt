@@ -38,74 +38,77 @@ class GeminiNanoProductAnalyzer @Inject constructor(
             if (items.isEmpty()) {
                 return@withContext emptyList()
             }
-            val loadedBitmaps = mutableListOf<Bitmap>()
             try {
                 if (!ensureModelReady(generativeModel)) {
                     throw IllegalStateException("Gemini Nano model is not ready")
                 }
 
-                val promptBuilder = StringBuilder()
-                promptBuilder.append(LlmPrompts.buildSystemInstruction())
-                promptBuilder.append("\n\n")
-                promptBuilder.append(LlmPrompts.ANALYZE_PROMPT)
-                promptBuilder.append("\n\nInput Data:\n")
+                val results = mutableListOf<ExpirationInfo>()
 
-                val contentBuilder = Content.builder()
+                for ((index, item) in items.withIndex()) {
+                    val loadedBitmaps = mutableListOf<Bitmap>()
+                    
+                    try {
+                        val contentBuilder = Content.builder()
+                        
+                        contentBuilder.text(LlmPrompts.NANO_SYSTEM_INSTRUCTION.trimIndent() + "\n\n" + LlmPrompts.NANO_ANALYZE_PROMPT + "\n\nInput Data:\n")
 
-                items.forEachIndexed { index, item ->
-                    promptBuilder.append("Item ${index + 1}:\n")
+                        item.productImagePath?.let { path ->
+                            BitmapUtils.decodeSampledBitmapFromFile(path)?.let { bitmap ->
+                                loadedBitmaps.add(bitmap)
+                                contentBuilder.text("Product front image (for name):\n")
+                                contentBuilder.image(bitmap)
+                            }
+                        }
 
-                    item.productImagePath?.let { path ->
-                        BitmapUtils.decodeSampledBitmapFromFile(path)?.let { bitmap ->
-                            loadedBitmaps.add(bitmap)
-                            promptBuilder.append("Product image for Item ${index + 1} attached.\n")
-                            contentBuilder.image(bitmap)
+                        item.dateImagePath?.let { path ->
+                            BitmapUtils.decodeSampledBitmapFromFile(path)?.let { bitmap ->
+                                loadedBitmaps.add(bitmap)
+                                contentBuilder.text("Product back image (for expiration date):\n")
+                                contentBuilder.image(bitmap)
+                            }
+                        }
+
+                        val content = contentBuilder.build()
+
+                        val request = GenerateContentRequest.builder(content).build()
+                        val response = generativeModel.generateContent(request)
+
+                        val outputText = response.candidates.firstOrNull()?.text
+                            ?: throw Exception("Empty response from Gemini Nano for item ${index + 1}")
+
+                        val cleanJson = extractJson(outputText)
+                        val decoded = if (cleanJson.trim().startsWith("[")) {
+                            json.decodeFromString<List<ExpirationInfo>>(cleanJson).firstOrNull()
+                        } else {
+                            json.decodeFromString<ExpirationInfo>(cleanJson)
+                        }
+                        
+                        if (decoded != null) {
+                            val normalized = decoded.copy(
+                                item_index = index + 1,
+                                expiration_date = parseExpirationDateUseCase.formatToStandardDate(decoded.expiration_date) ?: decoded.expiration_date,
+                                production_date = parseExpirationDateUseCase.formatToStandardDate(decoded.production_date) ?: decoded.production_date
+                            )
+                            results.add(normalized)
+                        } else {
+                            throw Exception("Failed to decode response for item ${index + 1}")
+                        }
+                    } finally {
+                        loadedBitmaps.forEach { bitmap ->
+                            if (!bitmap.isRecycled) {
+                                bitmap.recycle()
+                            }
                         }
                     }
-
-                    item.dateImagePath?.let { path ->
-                        BitmapUtils.decodeSampledBitmapFromFile(path)?.let { bitmap ->
-                            loadedBitmaps.add(bitmap)
-                            promptBuilder.append("Expiration date image for Item ${index + 1} attached.\n")
-                            contentBuilder.image(bitmap)
-                        }
-                    }
-                    promptBuilder.append("\n")
                 }
-
-                contentBuilder.text(promptBuilder.toString())
-                val content = contentBuilder.build()
-
-                val request = GenerateContentRequest.builder(content).build()
-                val response = generativeModel.generateContent(request)
-
-                val outputText = response.candidates.firstOrNull()?.text
-                    ?: throw Exception("Empty response from Gemini Nano")
-
-                val cleanJson = extractJson(outputText)
-                try {
-                    val decoded = json.decodeFromString<List<ExpirationInfo>>(cleanJson)
-                    return@withContext decoded.map { info ->
-                        info.copy(
-                            expiration_date = parseExpirationDateUseCase.formatToStandardDate(info.expiration_date) ?: info.expiration_date,
-                            production_date = parseExpirationDateUseCase.formatToStandardDate(info.production_date) ?: info.production_date
-                        )
-                    }
-                } catch (se: Exception) {
-                    Log.e(TAG, "Failed to parse Gemini Nano response. Raw text: $outputText", se)
-                    throw Exception("Gemini Nano invalid response format: ${se.message}")
-                }
+                
+                return@withContext results
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 Log.e(TAG, "Gemini Nano product analysis failed: ${e.message}", e)
                 throw e
-            } finally {
-                loadedBitmaps.forEach { bitmap ->
-                    if (!bitmap.isRecycled) {
-                        bitmap.recycle()
-                    }
-                }
             }
         }
 

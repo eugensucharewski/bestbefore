@@ -51,7 +51,7 @@ class ParseExpirationDateUseCase @Inject constructor() {
     operator fun invoke(dateStr: String?): LocalDate? {
         if (dateStr.isNullOrBlank()) return null
 
-        val sanitized = dateStr.trim()
+        var sanitized = dateStr.trim()
             .trim('"', '\'', '`')
             .trim()
             .removeSuffix(".")
@@ -60,6 +60,28 @@ class ParseExpirationDateUseCase @Inject constructor() {
             .trim()
 
         if (sanitized.isBlank()) return null
+        
+        // Handle "MM.YYYY" or "MM/YYYY" or "MM-YYYY" (Missing day)
+        val missingDayRegex4 = Regex("^(\\d{1,2})[./-](\\d{4})$")
+        val match4 = missingDayRegex4.matchEntire(sanitized)
+        if (match4 != null) {
+            sanitized = "01.${match4.groupValues[1]}.${match4.groupValues[2]}"
+        } else {
+            // Handle "MM.YY" vs "DD.MM"
+            val twoPartRegex = Regex("^(\\d{1,2})[./-](\\d{1,2})$")
+            val match2 = twoPartRegex.matchEntire(sanitized)
+            if (match2 != null) {
+                val part2 = match2.groupValues[2].toInt()
+                if (part2 > 12) {
+                    // It must be a year, e.g. 10.26 (Oct 2026) -> Missing day
+                    sanitized = "01.${match2.groupValues[1]}.${match2.groupValues[2]}"
+                } else {
+                    // Ambiguous, assume DD.MM -> Missing year. Append current year.
+                    val currentYear = LocalDate.now().year
+                    sanitized = "${match2.groupValues[1]}.${match2.groupValues[2]}.$currentYear"
+                }
+            }
+        }
 
         for (formatter in dateFormatters) {
             try {
