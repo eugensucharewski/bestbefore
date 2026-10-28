@@ -98,7 +98,7 @@ class GeminiProductAnalyzer @Inject constructor(
                 val cleanJson = extractJson(outputContent)
                 try {
                     val decoded = json.decodeFromString<List<ExpirationInfo>>(cleanJson)
-                    decoded.map { info ->
+                    decoded.sortedBy { it.item_index ?: Int.MAX_VALUE }.map { info ->
                         info.copy(
                             expiration_date = parseExpirationDateUseCase.formatToStandardDate(info.expiration_date) ?: info.expiration_date,
                             production_date = parseExpirationDateUseCase.formatToStandardDate(info.production_date) ?: info.production_date

@@ -8,7 +8,8 @@ import org.junit.Test
 
 class GeminiProductAnalyzerTest {
 
-    private val analyzer = GeminiProductAnalyzer()
+    private val parseExpirationDateUseCase = ParseExpirationDateUseCase()
+    private val analyzer = GeminiProductAnalyzer(parseExpirationDateUseCase)
     private val json = Json { ignoreUnknownKeys = true }
 
     @Test

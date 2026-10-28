@@ -24,9 +24,16 @@ RULES FOR DATES ("expiration_date" and "production_date"):
   * Date WITHOUT day (only month and year, such as "MM.YYYY" or "MM/YY"): use "01" as the day.
 - Set "production_date" ONLY if explicitly labeled with "Prod", "MFG", "Hergestellt am", or "Изготовлено". Otherwise, MUST be null. Do NOT copy expiration_date into production_date!
 
+RULES FOR MULTIPLE ITEMS:
+- The output JSON array MUST contain exactly one object for EACH item provided in the input.
+- You MUST maintain the exact original order (Item 1 first, Item 2 second, etc.).
+- Do NOT skip, combine, or group items, even if they are identical or unrecognizable.
+- Include the "item_index" field in each object to ensure correct mapping.
+
 Return ONLY a valid JSON array with this exact key order (replace placeholders with actual extracted values from the image):
 [
   {
+    "item_index": 1,
     "raw_text_detected": "<exact text visible on image>",
     "productName": "<short clean product name>",
     "date_found": <true or false>,
@@ -39,6 +46,23 @@ Return ONLY a valid JSON array with this exact key order (replace placeholders w
 
     const val ANALYZE_PROMPT =
         "Analyze the following food item images. Extract, clean, and structure the product names and expiration dates into a JSON array of ExpirationInfo objects."
+
+    const val NANO_SYSTEM_INSTRUCTION = """
+You are a food label extractor. 
+You will be provided with one or two images of the SAME product. One image may contain the product name (front label), and the other may contain the expiration date (back or bottom label).
+Extract:
+1. Brand and core product name (Title Case, 2-5 words).
+2. The exact raw date strings visible (do NOT reformat them).
+
+Respond strictly in this JSON format:
+{
+  "productName": "...",
+  "expiration_date": "...",
+  "production_date": "...",
+  "date_found": true
+}
+"""
+    const val NANO_ANALYZE_PROMPT = "Analyze the provided product image(s). Extract product name and expiration/production dates as JSON."
 
     fun extractJson(text: String): String {
         val arrayStart = text.indexOf("[")
