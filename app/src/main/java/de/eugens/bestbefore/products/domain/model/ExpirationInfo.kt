@@ -7,6 +7,7 @@ import kotlinx.serialization.Serializable
 @Serializable
 @Parcelize
 data class ExpirationInfo(
+    val item_index: Int? = null,
     val productName: String? = null,
     val date_found: Boolean = false,
     val expiration_date: String? = null,

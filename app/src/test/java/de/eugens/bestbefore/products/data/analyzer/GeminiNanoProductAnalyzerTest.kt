@@ -2,17 +2,16 @@ package de.eugens.bestbefore.products.data.analyzer
 
 import de.eugens.bestbefore.products.domain.model.ExpirationInfo
 import de.eugens.bestbefore.products.domain.use_case.ParseExpirationDateUseCase
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-@OptIn(ExperimentalCoroutinesApi::class)
 class GeminiNanoProductAnalyzerTest {
 
-    private val analyzer = GeminiNanoProductAnalyzer()
+    private val parseExpirationDateUseCase = ParseExpirationDateUseCase()
+    private val analyzer = GeminiNanoProductAnalyzer(parseExpirationDateUseCase)
     private val json = Json { ignoreUnknownKeys = true }
 
     @Test
